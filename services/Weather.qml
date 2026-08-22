@@ -17,8 +17,17 @@ Singleton {
     readonly property bool useUSCS: Config.options.bar.weather.useUSCS
     property bool gpsActive: Config.options.bar.weather.enableGPS
 
-    onUseUSCSChanged: root.getData()
-    onCityChanged: root.getData()
+    onUseUSCSChanged: debounceTimer.restart()
+    onCityChanged: debounceTimer.restart()
+
+    // Debounce: wait 800ms after the last change before fetching,
+    // so typing a city name letter-by-letter doesn't spam the API.
+    Timer {
+        id: debounceTimer
+        interval: 800
+        repeat: false
+        onTriggered: root.getData()
+    }
 
     property var location: ({
         valid: false,
@@ -89,7 +98,22 @@ Singleton {
 
         temp.lastRefresh = DateTime.time + " • " + DateTime.date
 
+        // Store coordinates returned by the API to use for UV index fetch
+        if (data?.coord?.lat !== undefined && data?.coord?.lon !== undefined) {
+            root.location.lat = data.coord.lat
+            root.location.lon = data.coord.lon
+            root.location.valid = true
+        }
+
+        // Keep previous UV until fresh data arrives
+        temp.uv = root.data.uv ?? 0
+
         root.data = temp
+
+        // Fetch UV index using the coordinates we now have
+        if (root.location.valid) {
+            root.getUvData(root.location.lat, root.location.lon)
+        }
     }
 
     function getData() {
@@ -116,6 +140,13 @@ Singleton {
 
         fetcher.command[2] = command
         fetcher.running = true
+    }
+
+    function getUvData(lat, lon) {
+        let apiKey = "8b05d62206f459e1d298cbe5844d7d87"
+        let url = `https://api.openweathermap.org/data/2.5/uvi?lat=${lat}&lon=${lon}&appid=${apiKey}`
+        uvFetcher.command[2] = `curl -s "${url}"`
+        uvFetcher.running = true
     }
 
     function formatCityName(cityName) {
@@ -152,6 +183,28 @@ Singleton {
         }
     }
 
+    // Fetches UV index from the free /uvi endpoint using lat/lon coordinates.
+    // Called automatically after a successful weather fetch (which provides the coords).
+    Process {
+        id: uvFetcher
+        command: ["bash", "-c", ""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.length === 0) return
+                try {
+                    const uvData = JSON.parse(text)
+                    if (uvData.value !== undefined) {
+                        let updated = Object.assign({}, root.data)
+                        updated.uv = Math.round(uvData.value * 10) / 10
+                        root.data = updated
+                    }
+                } catch (e) {
+                    console.error("[WeatherService] UV JSON parse error:", e.message)
+                }
+            }
+        }
+    }
+
     PositionSource {
         id: positionSource
         updateInterval: root.fetchInterval
@@ -163,7 +216,7 @@ Singleton {
                 root.location.valid = true
                 root.getData()
             } else {
-                root.gpsActive = root.location.valid ? true : false
+                root.gpsActive = root.location.valid
                 console.error("[WeatherService] Failed to get GPS location.")
             }
         }

@@ -342,6 +342,58 @@ ContentPage {
                     }
                 }
             }
+
+            ContentSubsection {
+                title: Translation.tr("Parallax")
+                Layout.fillWidth: true
+
+                GroupedList {
+                    ConfigSwitch {
+                        Layout.fillWidth: true
+                        buttonIcon: "sync_alt"
+                        text: Translation.tr("Workspace parallax")
+                        checked: Config.options.background.parallax.enableWorkspace
+                        onCheckedChanged: {
+                            Config.options.background.parallax.enableWorkspace = checked;
+                        }
+                    }
+
+                    ConfigSwitch {
+                        Layout.fillWidth: true
+                        buttonIcon: "side_navigation"
+                        text: Translation.tr("Sidebar parallax")
+                        checked: Config.options.background.parallax.enableSidebar
+                        onCheckedChanged: {
+                            Config.options.background.parallax.enableSidebar = checked;
+                        }
+                    }
+
+                    ConfigSwitch {
+                        Layout.fillWidth: true
+                        buttonIcon: "unfold_more_double"
+                        text: Translation.tr("Vertical parallax")
+                        checked: Config.options.background.parallax.vertical
+                        visible: Config.options.background.parallax.enableWorkspace
+                        onCheckedChanged: {
+                            Config.options.background.parallax.vertical = checked;
+                        }
+                    }
+
+                    ConfigSlider {
+                        visible: Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar
+                        text: Translation.tr("Preferred wallpaper zoom")
+                        value: Config.options.background.parallax.workspaceZoom * 100
+                        usePercentTooltip: true
+                        buttonIcon: "loupe"
+                        from: 10
+                        to: 200
+                        stopIndicatorValues: [100]
+                        onValueChanged: {
+                            Config.options.background.parallax.workspaceZoom = value / 100;
+                        }
+                    }
+                }
+            }
         }
 
         ContentSection {

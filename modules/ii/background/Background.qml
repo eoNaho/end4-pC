@@ -166,6 +166,7 @@ Variants {
             bgRoot.currentWallpaperSource = bgRoot.wallpaperPath
             bgRoot.previousWallpaperSource = ""
             bgRoot.transitionProgress = 1.0
+            bgRoot.updateZoomScale()
             if (bgRoot.wallpaperAnimation !== "") {
                 bgRoot.currentShader = bgRoot.wallpaperAnimation === "random"
                     ? bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
@@ -176,6 +177,7 @@ Variants {
 
         onWallpaperPathChanged: {
             bgRoot.videoRevealed = false
+            bgRoot.updateZoomScale()
             if (wallpaperSafetyTriggered) {
                 previousWallpaper.source = ""
                 wallpaper.source = ""
@@ -238,12 +240,103 @@ Variants {
             }
         }
 
+        // Parallax calculations
+        readonly property real parallaxRation: 1.1
+        readonly property real additionalScaleFactor: Config.options.background.parallax.workspaceZoom
+        property real effectiveWallpaperScale: 1
+        property int wallpaperWidth: modelData.width
+        property int wallpaperHeight: modelData.height
+        property real scaledWallpaperWidth: wallpaperWidth * effectiveWallpaperScale
+        property real scaledWallpaperHeight: wallpaperHeight * effectiveWallpaperScale
+        property real parallaxTotalPixelsX: Math.max(0, scaledWallpaperWidth - screen.width)
+        property real parallaxTotalPixelsY: Math.max(0, scaledWallpaperHeight - screen.height)
+        readonly property bool verticalParallax: (Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical
+
+        property list<var> relevantWindows: HyprlandData.windowList.filter(win => win.monitor == monitor?.id && win.workspace.id >= 0).sort((a, b) => a.workspace.id - b.workspace.id)
+        property int firstWorkspaceId: relevantWindows[0]?.workspace.id || 1
+        property int lastWorkspaceId: relevantWindows[relevantWindows.length - 1]?.workspace.id || 10
+        property int workspaceChunkSize: Config?.options.bar.workspaces.shown ?? 10
+        property int totalWorkspaces: Math.ceil(lastWorkspaceId / workspaceChunkSize) * workspaceChunkSize
+
+        property int workspaceIndex: (bgRoot.monitor.activeWorkspace?.id ?? 1) - 1
+        property real middleFraction: 0.5
+        property real fraction: {
+            if (bgRoot.totalWorkspaces <= 1) return middleFraction;
+            return Math.max(0, Math.min(1, workspaceIndex / (bgRoot.totalWorkspaces - 1)));
+        }
+        property real usedFractionX: {
+            let usedFraction = middleFraction;
+            if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) {
+                usedFraction = fraction;
+            }
+            if (Config.options.background.parallax.enableSidebar) {
+                let sidebarFraction = bgRoot.parallaxRation / bgRoot.workspaceChunkSize / 2;
+                usedFraction += (sidebarFraction * GlobalStates.sidebarRightOpen - sidebarFraction * GlobalStates.sidebarLeftOpen);
+            }
+            return Math.max(0, Math.min(1, usedFraction));
+        }
+        property real usedFractionY: {
+            let usedFraction = middleFraction;
+            if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) {
+                usedFraction = fraction;
+            }
+            return Math.max(0, Math.min(1, usedFraction));
+        }
+
+        property real targetWallpaperX: {
+            if (bgRoot.screen.width >= bgRoot.scaledWallpaperWidth) {
+                return (bgRoot.screen.width - bgRoot.scaledWallpaperWidth) / 2;
+            }
+            return - bgRoot.parallaxTotalPixelsX * usedFractionX;
+        }
+        property real targetWallpaperY: {
+            if (bgRoot.screen.height >= bgRoot.scaledWallpaperHeight) {
+                return (bgRoot.screen.height - bgRoot.scaledWallpaperHeight) / 2;
+            }
+            return - bgRoot.parallaxTotalPixelsY * usedFractionY;
+        }
+
+        function updateZoomScale() {
+            if (bgRoot.wallpaperPath && bgRoot.wallpaperPath.length > 0) {
+                getWallpaperSizeProc.path = bgRoot.wallpaperPath;
+                getWallpaperSizeProc.running = true;
+            }
+        }
+
+        Process {
+            id: getWallpaperSizeProc
+            property string path: bgRoot.wallpaperPath
+            command: ["magick", "identify", "-format", "%w %h", path]
+            stdout: StdioCollector {
+                id: wallpaperSizeOutputCollector
+                onStreamFinished: {
+                    const output = wallpaperSizeOutputCollector.text;
+                    const parts = output.trim().split(" ");
+                    if (parts.length >= 2) {
+                        const width = Number(parts[0]);
+                        const height = Number(parts[1]);
+                        if (width > 0 && height > 0) {
+                            bgRoot.wallpaperWidth = width;
+                            bgRoot.wallpaperHeight = height;
+                            const minSuitableScale = Math.max(bgRoot.screen.width / width, bgRoot.screen.height / height);
+                            bgRoot.effectiveWallpaperScale = minSuitableScale * bgRoot.additionalScaleFactor * bgRoot.parallaxRation;
+                        }
+                    }
+                }
+            }
+        }
+
         Item {
             anchors.fill: parent
 
             Image {
                 id: previousWallpaper
-                anchors.fill: parent
+                x: bgRoot.targetWallpaperX
+                y: bgRoot.targetWallpaperY
+                width: bgRoot.scaledWallpaperWidth
+                height: bgRoot.scaledWallpaperHeight
+                sourceSize.width: bgRoot.scaledWallpaperWidth
+                sourceSize.height: bgRoot.scaledWallpaperHeight
                 fillMode: Image.PreserveAspectCrop
                 cache: true
                 smooth: true
@@ -254,7 +347,12 @@ Variants {
 
             StyledImage {
                 id: wallpaper
-                anchors.fill: parent
+                x: bgRoot.targetWallpaperX
+                y: bgRoot.targetWallpaperY
+                width: bgRoot.scaledWallpaperWidth
+                height: bgRoot.scaledWallpaperHeight
+                sourceSize.width: bgRoot.scaledWallpaperWidth
+                sourceSize.height: bgRoot.scaledWallpaperHeight
                 fillMode: Image.PreserveAspectCrop
                 cache: true
                 smooth: true
@@ -262,9 +360,24 @@ Variants {
                 layer.enabled: true
                 visible: !blurLoader.active && !bgRoot.centeredWallpaperEnabled && !bgRoot.videoRevealed
                     && (bgRoot.wallpaperAnimation === "" || bgRoot.transitionProgress >= 1.0)
+                Behavior on x {
+                    NumberAnimation {
+                        duration: 600
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on y {
+                    NumberAnimation {
+                        duration: 600
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 onStatusChanged: {
-                    if (status === Image.Ready && bgRoot.transitionProgress === 0.0) {
-                        transitionAnim.restart()
+                    if (status === Image.Ready) {
+                        bgRoot.updateZoomScale()
+                        if (bgRoot.transitionProgress === 0.0) {
+                            transitionAnim.restart()
+                        }
                     }
                 }
             }
@@ -302,7 +415,7 @@ Variants {
             Loader {
                 id: blurLoader
                 active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
-                anchors.fill: parent
+                anchors.fill: wallpaper
                 scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
                 Behavior on scale {
                     NumberAnimation {
@@ -313,9 +426,11 @@ Variants {
                     }
                 }
                 sourceComponent: GaussianBlur {
-                    source: bgRoot.wallpaperAnimation === "" || bgRoot.transitionProgress >= 1.0 ? wallpaper : transitionEffect
+                    source: wallpaper
                     radius: GlobalStates.screenLocked ? Config.options.lock.blur.radius : 0
                     samples: Config.options.lock.blur.size 
+                    width: wallpaper.width
+                    height: wallpaper.height
                     Rectangle {
                         opacity: GlobalStates.screenLocked ? 1 : 0
                         anchors.fill: parent

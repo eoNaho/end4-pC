@@ -171,11 +171,19 @@ Singleton {
             // Popup
             if (!root.popupInhibited) {
                 newNotifObject.popup = true;
-                if (notification.expireTimeout != 0) {
-                    newNotifObject.timer = notifTimerComponent.createObject(root, {
-                        "notificationId": newNotifObject.notificationId,
-                        "interval": notification.expireTimeout < 0 ? (Config?.options.notifications.timeout ?? 7000) : notification.expireTimeout,
-                    });
+                // Per the D-Bus Notifications spec, critical notifications (urgency=2)
+                // must not expire automatically — only dismiss them when the user acts.
+                // A positive expireTimeout set by the sender always overrides this rule.
+                const isCritical = notification.urgency.toString() === "2"
+                    || notification.urgency.toString().toLowerCase() === "critical";
+                const senderForcedTimeout = notification.expireTimeout > 0;
+                if (!isCritical || senderForcedTimeout) {
+                    if (notification.expireTimeout != 0) {
+                        newNotifObject.timer = notifTimerComponent.createObject(root, {
+                            "notificationId": newNotifObject.notificationId,
+                            "interval": notification.expireTimeout < 0 ? (Config?.options.notifications.timeout ?? 7000) : notification.expireTimeout,
+                        });
+                    }
                 }
                 root.unread++;
             }

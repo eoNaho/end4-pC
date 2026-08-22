@@ -17,7 +17,9 @@ Singleton {
     property string query: ""
 
     function ensurePrefix(prefix) {
-        if ([Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.symbols, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch,].some(i => root.query.startsWith(i))) {
+        // Use all configured prefixes so any new ones added to Config are picked up automatically
+        const allPrefixes = Object.values(Config.options.search.prefix).filter(p => typeof p === "string");
+        if (allPrefixes.some(p => root.query.startsWith(p))) {
             root.query = prefix + root.query.slice(1);
         } else {
             root.query = prefix + root.query;

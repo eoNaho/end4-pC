@@ -42,10 +42,29 @@ Singleton {
 
     Process {
         id: tempProc
-        command: ["bash", "-c", "sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Tdie' | grep -oP '\\+\\K[0-9.]+(?=°C)' | head -1"]
+        // Read CPU temperature directly from sysfs hwmon (no grep/awk overhead).
+        // Looks for hwmon entries named "Tctl", "Tdie" or "Package id 0" (AMD/Intel).
+        // Falls back to `sensors` if nothing is found in hwmon.
+        command: ["bash", "-c", `
+            for f in /sys/class/hwmon/hwmon*/; do
+                name=$(cat "$f/name" 2>/dev/null)
+                for temp_label in "$f"temp*_label; do
+                    [ -f "$temp_label" ] || continue
+                    label=$(cat "$temp_label" 2>/dev/null)
+                    case "$label" in
+                        "Tctl"|"Tdie"|"Package id 0")
+                            input="${temp_label%_label}_input"
+                            [ -f "$input" ] && awk '{printf "%.1f", $1/1000}' "$input" && exit 0
+                            ;;
+                    esac
+                done
+            done
+            sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Tdie' | grep -oP '\\+\\K[0-9.]+(?=°C)' | head -1
+        `]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.cpuTemp = parseFloat(text.trim())
+                const val = parseFloat(text.trim())
+                if (!isNaN(val)) root.cpuTemp = val
             }
         }
     }
@@ -105,9 +124,10 @@ Singleton {
     }
 
     Timer {
-        interval: 1
+        interval: Config.options?.resources?.updateInterval ?? 3000
         running: true
         repeat: true
+        triggeredOnStart: true
         onTriggered: {
             fileMeminfo.reload()
             fileStat.reload()
@@ -133,7 +153,6 @@ Singleton {
             }
 
             root.updateHistories()
-            interval = Config.options?.resources?.updateInterval ?? 3000
         }
     }
 
