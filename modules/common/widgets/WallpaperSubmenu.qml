@@ -240,5 +240,58 @@ Item {
                 }
             }
         }
+
+        // Parallax
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: parallaxCol.implicitHeight + 16
+            radius: Appearance.rounding.verylarge
+            color: Appearance.colors.colLayer0
+
+            ColumnLayout {
+                id: parallaxCol
+                anchors { fill: parent; margins: 8 }
+                spacing: 6
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "sync_alt"
+                    text: Translation.tr("Workspace parallax")
+                    checked: Config.options.background.parallax.enableWorkspace
+                    onCheckedChanged: Config.options.background.parallax.enableWorkspace = checked
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "side_navigation"
+                    text: Translation.tr("Sidebar parallax")
+                    checked: Config.options.background.parallax.enableSidebar
+                    onCheckedChanged: Config.options.background.parallax.enableSidebar = checked
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "unfold_more_double"
+                    text: Translation.tr("Vertical parallax")
+                    checked: Config.options.background.parallax.vertical
+                    visible: Config.options.background.parallax.enableWorkspace
+                    onCheckedChanged: Config.options.background.parallax.vertical = checked
+                }
+
+                ConfigSlider {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Zoom")
+                    showLabel: true
+                    visible: Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar
+                    value: Config.options.background.parallax.workspaceZoom * 100
+                    usePercentTooltip: true
+                    buttonIcon: "loupe"
+                    from: 10
+                    to: 200
+                    stopIndicatorValues: [100]
+                    onValueChanged: Config.options.background.parallax.workspaceZoom = value / 100
+                }
+            }
+        }
     }
 }

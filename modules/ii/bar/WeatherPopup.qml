@@ -130,7 +130,7 @@ StyledPopup {
             rowSpacing: 4
             columnSpacing: 4
             uniformCellWidths: true
-            
+
             Layout.leftMargin: 2
             Layout.rightMargin: 2
             Layout.bottomMargin: 2
@@ -165,6 +165,23 @@ StyledPopup {
                 title: Translation.tr("Pressure")
                 symbol: "readiness_score"
                 value: Weather.data?.press ?? "720 hpa"
+            }
+            WeatherCard {
+                readonly property real uvValue: Weather.data?.uv ?? 0
+                // UV color: green (0-2) → yellow (3-5) → orange (6-7) → red (8+)
+                readonly property color uvColor: uvValue >= 8 ? "#e53935"
+                    : uvValue >= 6 ? "#FB8C00"
+                    : uvValue >= 3 ? "#FDD835"
+                    : Appearance.colors.colOnSurfaceVariant
+                title: Translation.tr("UV Index")
+                symbol: "wb_sunny"
+                value: uvValue > 0 ? uvValue.toFixed(1) : "--"
+                fgColor: uvColor
+            }
+            WeatherCard {
+                title: Translation.tr("Feels like")
+                symbol: "thermometer"
+                value: Weather.data?.tempFeelsLike ?? "--°"
             }
         }
     }

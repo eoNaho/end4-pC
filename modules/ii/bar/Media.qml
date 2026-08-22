@@ -155,41 +155,84 @@ Item {
         active: !root.vertical && !root.isMaterial
         visible: active
         anchors.fill: parent
-        sourceComponent: RowLayout {
-            spacing: 4
-            ClippedFilledCircularProgress {
-                Layout.alignment: Qt.AlignVCenter
-                Layout.leftMargin: 3
-                implicitSize: 20
-                lineWidth: Appearance.rounding.unsharpen
-                value: root.activePlayer?.position / root.activePlayer?.length
-                colPrimary: Appearance.colors.colOnSecondaryContainer
-                enableAnimation: false
-                Item {
-                    anchors.centerIn: parent
-                    width: 20
-                    height: 20
-                    MaterialSymbol {
+        sourceComponent: ColumnLayout {
+            spacing: 0
+
+            RowLayout {
+                spacing: 4
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                ClippedFilledCircularProgress {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 3
+                    implicitSize: 20
+                    lineWidth: Appearance.rounding.unsharpen
+                    value: root.activePlayer?.position / root.activePlayer?.length
+                    colPrimary: Appearance.colors.colOnSecondaryContainer
+                    enableAnimation: false
+                    Item {
                         anchors.centerIn: parent
-                        fill: 1
-                        text: root.activePlayer?.isPlaying ? "pause" : "music_note"
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.m3colors.m3onSecondaryContainer
+                        width: 20
+                        height: 20
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            fill: 1
+                            text: root.activePlayer?.isPlaying ? "pause" : "music_note"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Appearance.m3colors.m3onSecondaryContainer
+                        }
+                    }
+                }
+
+                ColumnLayout {
+                    spacing: 0
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+
+                    StyledText {
+                        visible: Config.options.bar.verbose
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        color: Appearance.colors.colOnLayer1
+                        text: Config.options.bar.media.onlyTitle
+                            ? root.cleanedTitle
+                            : `${root.cleanedTitle}${root.activePlayer?.trackArtist ? ' • ' + root.activePlayer.trackArtist : ''}`
                     }
                 }
             }
-            StyledText {
-                visible: Config.options.bar.verbose
-                Layout.alignment: Qt.AlignVCenter
+
+            // Thin progress bar — only visible when there is a valid track & position
+            Rectangle {
                 Layout.fillWidth: true
-                Layout.rightMargin: 0
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                color: Appearance.colors.colOnLayer1
-                text: Config.options.bar.media.onlyTitle ? root.cleanedTitle : `${root.cleanedTitle}${root.activePlayer?.trackArtist ? ' • ' + root.activePlayer.trackArtist : ''}`
+                Layout.leftMargin: 3
+                Layout.rightMargin: 3
+                visible: root.hasTrack && (root.activePlayer?.length ?? 0) > 0
+                implicitHeight: 2
+                radius: 1
+                color: Appearance.colors.colLayer2
+
+                Rectangle {
+                    readonly property real progress: root.activePlayer
+                        ? Math.max(0, Math.min(1, root.activePlayer.position / root.activePlayer.length))
+                        : 0
+                    width: parent.width * progress
+                    height: parent.height
+                    radius: parent.radius
+                    color: Appearance.colors.colPrimary
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Config.options.resources.updateInterval
+                            easing.type: Easing.Linear
+                        }
+                    }
+                }
             }
         }
     }
+
 
     // Horizontal Material
     Loader {
