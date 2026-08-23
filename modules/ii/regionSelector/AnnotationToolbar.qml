@@ -26,7 +26,7 @@ Rectangle {
     readonly property var colorPalette: ["#ff5252", "#ffb300", "#4caf50", "#2196f3", "#ffffff", "#111111"]
     readonly property var widths: [2, 4, 8]
 
-    implicitWidth: row.implicitWidth + Appearance.spacing.space200 * 2
+    implicitWidth: row.implicitWidth + 16 * 2
     implicitHeight: 48
     radius: height / 2
     color: Appearance.colors.colLayer0
@@ -56,7 +56,7 @@ Rectangle {
     RowLayout {
         id: row
         anchors.centerIn: parent
-        spacing: Appearance.spacing.space50
+        spacing: 4
 
         Repeater {
             model: bar.tools
@@ -153,15 +153,15 @@ Rectangle {
             onClicked: bar.confirmed()
             contentItem: RowLayout {
                 anchors.fill: parent
-                spacing: Appearance.spacing.space50
+                spacing: 4
                 MaterialSymbol {
-                    Layout.leftMargin: Appearance.spacing.space150
+                    Layout.leftMargin: 12
                     text: "content_copy"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnPrimary
                 }
                 StyledText {
-                    Layout.rightMargin: Appearance.spacing.space150
+                    Layout.rightMargin: 12
                     text: Translation.tr("Copy")
                     color: Appearance.colors.colOnPrimary
                 }

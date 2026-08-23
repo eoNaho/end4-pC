@@ -72,7 +72,7 @@ Item {
         }
     }
 
-    property int margins: Appearance.spacing.space100
+    property int margins: 8
     implicitWidth: content.implicitWidth + margins * 2
     implicitHeight: content.implicitHeight + margins * 2
 
