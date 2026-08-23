@@ -91,18 +91,18 @@ Singleton {
         return str.toLowerCase().replace(/_/g, "-");
     }
 
-    property var _iconCache: ({})
+    property var _iconCache: new Map()
 
     onListChanged: {
-        _iconCache = ({})
+        _iconCache.clear()
     }
 
     function guessIcon(str) {
         if (!str || str.length == 0) return "image-missing";
-        if (root._iconCache[str]) return root._iconCache[str];
+        if (root._iconCache.has(str)) return root._iconCache.get(str);
 
         const result = root._computeGuessIcon(str);
-        root._iconCache[str] = result;
+        root._iconCache.set(str, result);
         return result;
     }
 

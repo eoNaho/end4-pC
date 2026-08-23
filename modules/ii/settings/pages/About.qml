@@ -79,7 +79,9 @@ ContentPage {
                     anchors.centerIn: parent
                     implicitWidth: 72
                     implicitHeight: 72
-                    source: Quickshell.iconPath(SystemInfo.logo) || Quickshell.shellPath("assets/icons/" + SystemInfo.logo + ".svg")
+                    source: (SystemInfo.logo && SystemInfo.logo.length > 0)
+                        ? (Quickshell.iconPath(SystemInfo.logo) || Quickshell.shellPath("assets/icons/" + SystemInfo.logo + ".svg"))
+                        : ""
                 }
             }
 
