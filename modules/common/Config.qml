@@ -533,6 +533,11 @@ Singleton {
                 property real hoverRegionHeight: 2
                 property bool pinnedOnStartup: false
                 property bool hoverToReveal: true // When false, only reveals on empty workspace
+                property bool magnification: true
+                property real magnificationScale: 1.35
+                property real magnificationDistance: 130
+                property bool showWindowPreviews: true
+                property bool showContextMenu: true
                 property list<string> pinnedApps: [ // IDs of pinned entries
                     "org.kde.dolphin", "kitty",]
                 property list<string> ignoredAppRegexes: []

@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -16,23 +17,40 @@ DockButton {
     property real iconSize: 33
     property real countDotWidth: 10
     property real countDotHeight: 4
-    property bool appIsActive: appToplevel.toplevels.find(t => (t.activated == true)) !== undefined
+    property bool appIsActive: (appToplevel?.toplevels ?? []).some(t => t.activated === true)
+    
+    // Zoom magnification
+    property bool isMagnified: (Config.options?.dock?.magnification ?? true) && root.hovered
+    property real magScale: isMagnified ? (Config.options?.dock?.magnificationScale ?? 1.3) : 1.0
+    property real magYOffset: isMagnified ? -6 : 0.0
 
-    readonly property bool isSeparator: appToplevel.appId === "SEPARATOR"
-    property var desktopEntry: DesktopEntries.heuristicLookup(appToplevel.appId)
+    readonly property bool isSeparator: appToplevel?.appId === "SEPARATOR"
+    property var desktopEntry: DesktopEntries.heuristicLookup(appToplevel?.appId ?? "")
     enabled: !isSeparator
     implicitWidth: isSeparator ? 1 : implicitHeight - topInset - bottomInset
 
     Connections {
         target: DesktopEntries
-
         function onApplicationsChanged() {
-            root.desktopEntry = DesktopEntries.heuristicLookup(appToplevel.appId);
+            root.desktopEntry = DesktopEntries.heuristicLookup(root.appToplevel?.appId ?? "");
+        }
+    }
+
+    hoverEnabled: true
+    onHoveredChanged: {
+        if (root.appListRoot) {
+            if (hovered) {
+                root.appListRoot.lastHoveredButton = root;
+                root.appListRoot.buttonHovered = true;
+                root.lastFocused = (root.appToplevel?.toplevels?.length ?? 1) - 1;
+            } else if (root.appListRoot.lastHoveredButton === root) {
+                root.appListRoot.buttonHovered = false;
+            }
         }
     }
 
     Loader {
-        active: isSeparator
+        active: root.isSeparator
         anchors {
             fill: parent
             topMargin: dockVisualBackground.margin + dockRow.padding + Appearance.rounding.normal
@@ -41,35 +59,15 @@ DockButton {
         sourceComponent: DockSeparator {}
     }
 
-    Loader {
-        anchors.fill: parent
-        active: appToplevel.toplevels.length > 0
-        sourceComponent: MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            onEntered: {
-                appListRoot.lastHoveredButton = root
-                appListRoot.buttonHovered = true
-                lastFocused = appToplevel.toplevels.length - 1
-            }
-            onExited: {
-                if (appListRoot.lastHoveredButton === root) {
-                    appListRoot.buttonHovered = false
-                }
-            }
-        }
-    }
-
     onClicked: {
         launchAnims.play(Config.options.dock.launchAnimation);
-        if (appToplevel.toplevels.length === 0) {
+        const toplevels = root.appToplevel?.toplevels ?? [];
+        if (toplevels.length === 0) {
             if (root.desktopEntry) Quickshell.execDetached(["gtk-launch", root.desktopEntry.id]);
             return;
         }
-        lastFocused = (lastFocused + 1) % appToplevel.toplevels.length
-        appToplevel.toplevels[lastFocused].activate()
+        root.lastFocused = (root.lastFocused + 1) % toplevels.length;
+        toplevels[root.lastFocused].activate();
     }
 
     middleClickAction: () => {
@@ -77,37 +75,47 @@ DockButton {
     }
 
     altAction: () => {
-        TaskbarApps.togglePin(appToplevel.appId);
+        if (Config.options.dock?.showContextMenu ?? true) {
+            contextMenu.active = !contextMenu.active;
+        }
     }
 
     contentItem: Loader {
-        active: !isSeparator
+        active: !root.isSeparator
         sourceComponent: Item {
-            anchors.centerIn: parent
+            anchors.fill: parent
 
             Item {
                 id: iconArea
-                implicitWidth: root.iconSize
-                implicitHeight: root.iconSize
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    verticalCenter: parent.verticalCenter
-                }
-                scale: launchAnims.scale
+                width: root.iconSize
+                height: root.iconSize
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: root.magYOffset
+                scale: launchAnims.scale * root.magScale
                 rotation: launchAnims.rot
                 transformOrigin: Item.Center
 
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.2
+                    }
+                }
+                Behavior on anchors.verticalCenterOffset {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
                 Loader {
                     id: iconImageLoader
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        verticalCenter: parent.verticalCenter
-                    }
+                    anchors.fill: parent
                     active: !root.isSeparator
                     sourceComponent: IconImage {
-                        source: Quickshell.iconPath(AppSearch.guessIcon(appToplevel.appId), "image-missing")
+                        source: Quickshell.iconPath(AppSearch.guessIcon(root.appToplevel?.appId ?? ""), "image-missing")
                         implicitSize: root.iconSize
                     }
                 }
@@ -118,7 +126,7 @@ DockButton {
                     sourceComponent: Item {
                         Desaturate {
                             id: desaturatedIcon
-                            visible: false // There's already color overlay
+                            visible: false
                             anchors.fill: parent
                             source: iconImageLoader
                             desaturation: 0.8
@@ -132,6 +140,7 @@ DockButton {
                 }
             }
 
+            // Running indicator dots
             RowLayout {
                 spacing: 3
                 anchors {
@@ -139,15 +148,25 @@ DockButton {
                     topMargin: 2
                     horizontalCenter: parent.horizontalCenter
                 }
+                visible: (root.appToplevel?.toplevels?.length ?? 0) > 0
+
                 Repeater {
-                    model: Math.min(appToplevel.toplevels.length, 3)
+                    model: Math.min(root.appToplevel?.toplevels?.length ?? 0, 3)
                     delegate: Rectangle {
                         required property int index
                         radius: Appearance.rounding.full
-                        implicitWidth: (appToplevel.toplevels.length <= 3) ? 
-                            root.countDotWidth : root.countDotHeight // Circles when too many
+                        implicitWidth: (root.appToplevel?.toplevels?.length === 1) ? root.countDotWidth : root.countDotHeight
                         implicitHeight: root.countDotHeight
-                        color: appIsActive ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                        color: root.appIsActive
+                            ? Appearance.colors.colPrimary
+                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.45)
+                        
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+                        Behavior on implicitWidth {
+                            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        }
                     }
                 }
             }
@@ -156,5 +175,11 @@ DockButton {
 
     DockLaunchAnimations {
         id: launchAnims
+    }
+
+    DockAppContextMenu {
+        id: contextMenu
+        hoverTarget: root
+        appToplevel: root.appToplevel
     }
 }

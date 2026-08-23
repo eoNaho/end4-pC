@@ -7,6 +7,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell.Io
 import Quickshell
 import Quickshell.Widgets
@@ -170,7 +171,7 @@ Scope {
                                 id: activeAppsArea
                                 Layout.fillHeight: true
                                 Layout.topMargin: 0
-                                property bool requestDockShow: false
+                                property bool requestDockShow: unpinnedPreviewPopup.show
 
                                 property var activeUnpinned: {
                                     return TaskbarApps.apps.filter(
@@ -222,6 +223,197 @@ Scope {
                                     id: appListBridge
                                     property Item lastHoveredButton: null
                                     property bool buttonHovered: false
+                                }
+
+                                PopupWindow {
+                                    id: unpinnedPreviewPopup
+                                    property var appTopLevel: appListBridge.lastHoveredButton?.appToplevel ?? null
+
+                                    property bool shouldShow: (Config.options.dock?.showWindowPreviews ?? true)
+                                                              && WM.compositor === "hyprland"
+                                                              && (unpinnedPopupMouseArea.containsMouse || appListBridge.buttonHovered)
+                                                              && appTopLevel
+                                                              && appTopLevel.toplevels
+                                                              && appTopLevel.toplevels.length > 0
+
+                                    property bool show: false
+                                    property real cachedCenterX: 0
+
+                                    function getCenterX(btn) {
+                                        if (!btn || !activeAppsArea.QsWindow) return 0;
+                                        return activeAppsArea.QsWindow.mapFromItem(btn, btn.width / 2, 0).x;
+                                    }
+
+                                    Connections {
+                                        target: appListBridge
+                                        function onLastHoveredButtonChanged() {
+                                            if (appListBridge.lastHoveredButton)
+                                                unpinnedPreviewPopup.cachedCenterX = unpinnedPreviewPopup.getCenterX(appListBridge.lastHoveredButton);
+                                        }
+                                        function onButtonHoveredChanged() {
+                                            if (appListBridge.buttonHovered && appListBridge.lastHoveredButton)
+                                                unpinnedPreviewPopup.cachedCenterX = unpinnedPreviewPopup.getCenterX(appListBridge.lastHoveredButton);
+                                            unpinnedUpdateTimer.restart();
+                                        }
+                                    }
+
+                                    onShouldShowChanged: {
+                                        unpinnedUpdateTimer.restart();
+                                    }
+
+                                    Timer {
+                                        id: unpinnedUpdateTimer
+                                        interval: 100
+                                        onTriggered: {
+                                            unpinnedPreviewPopup.show = unpinnedPreviewPopup.shouldShow;
+                                        }
+                                    }
+
+                                    anchor {
+                                        window: activeAppsArea.QsWindow?.window ?? null
+                                        adjustment: PopupAdjustment.None
+                                        gravity: Edges.Top | Edges.Right
+                                        edges: Edges.Top | Edges.Left
+                                    }
+
+                                    visible: unpinnedPopupBackground.opacity > 0
+                                    color: "transparent"
+                                    implicitWidth: activeAppsArea.QsWindow?.window?.width ?? 1
+                                    implicitHeight: unpinnedPopupMouseArea.implicitHeight + 30 + Appearance.sizes.elevationMargin * 2
+
+                                    MouseArea {
+                                        id: unpinnedPopupMouseArea
+                                        anchors.bottom: parent.bottom
+                                        implicitWidth:  unpinnedPopupBackground.implicitWidth + Appearance.sizes.elevationMargin * 2
+                                        implicitHeight: 200 + 30 + Appearance.sizes.elevationMargin * 2
+                                        hoverEnabled: true
+                                        x: unpinnedPreviewPopup.cachedCenterX - width / 2
+
+                                        StyledRectangularShadow {
+                                            target: unpinnedPopupBackground
+                                            opacity: unpinnedPreviewPopup.show ? 1 : 0
+                                            visible: opacity > 0
+                                            Behavior on opacity {
+                                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            id: unpinnedPopupBackground
+                                            property real padding: 6
+                                            opacity: unpinnedPreviewPopup.show ? 1 : 0
+                                            visible: opacity > 0
+                                            Behavior on opacity {
+                                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                            }
+                                            clip: true
+                                            color: Appearance.colors.colLayer0
+                                            border.width: 1
+                                            border.color: Appearance.colors.colLayer0Border
+                                            radius: Appearance.rounding.large
+                                            anchors.bottom: parent.bottom
+                                            anchors.bottomMargin: Appearance.sizes.elevationMargin
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            implicitHeight: unpinnedPreviewRowLayout.implicitHeight + padding * 2
+                                            implicitWidth:  unpinnedPreviewRowLayout.implicitWidth  + padding * 2
+                                            Behavior on implicitWidth {
+                                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                            }
+                                            Behavior on implicitHeight {
+                                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                            }
+
+                                            RowLayout {
+                                                id: unpinnedPreviewRowLayout
+                                                anchors.centerIn: parent
+                                                spacing: 8
+
+                                                Repeater {
+                                                    model: ScriptModel {
+                                                        values: WM.compositor === "hyprland" ? (unpinnedPreviewPopup.appTopLevel?.toplevels ?? []) : []
+                                                    }
+
+                                                    RippleButton {
+                                                        id: unpinnedWindowBtn
+                                                        Layout.preferredWidth: 210
+                                                        Layout.preferredHeight: 160
+                                                        implicitWidth: 210
+                                                        implicitHeight: 160
+                                                        clip: true
+                                                        required property var modelData
+                                                        padding: 0
+                                                        buttonRadius: Appearance.rounding.normal
+
+                                                        middleClickAction: () => { unpinnedWindowBtn.modelData?.close() }
+                                                        onClicked: { unpinnedWindowBtn.modelData?.activate() }
+
+                                                        contentItem: ColumnLayout {
+                                                            anchors.fill: parent
+                                                            spacing: 4
+
+                                                            RowLayout {
+                                                                Layout.fillWidth: true
+                                                                Layout.leftMargin: 8
+                                                                Layout.rightMargin: 6
+                                                                Layout.topMargin: 4
+                                                                spacing: 4
+
+                                                                StyledText {
+                                                                    Layout.fillWidth: true
+                                                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                                                    text: unpinnedWindowBtn.modelData?.title ?? ""
+                                                                    elide: Text.ElideRight
+                                                                    color: Appearance.colors.colOnLayer0
+                                                                }
+
+                                                                RippleButton {
+                                                                    id: unpinnedCloseBtn
+                                                                    colBackground: "transparent"
+                                                                    colBackgroundHover: Appearance.colors.colErrorContainer
+                                                                    implicitWidth:  22
+                                                                    implicitHeight: 22
+                                                                    buttonRadius:   Appearance.rounding.full
+                                                                    contentItem: MaterialSymbol {
+                                                                        anchors.centerIn: parent
+                                                                        horizontalAlignment: Text.AlignHCenter
+                                                                        text: "close"
+                                                                        iconSize: 14
+                                                                        color: unpinnedCloseBtn.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer0
+                                                                    }
+                                                                    onClicked: { unpinnedWindowBtn.modelData?.close() }
+                                                                    StyledToolTip { text: Translation.tr("Close") }
+                                                                }
+                                                            }
+
+                                                            Item {
+                                                                Layout.fillWidth: true
+                                                                Layout.fillHeight: true
+                                                                Layout.bottomMargin: 6
+                                                                clip: true
+
+                                                                ScreencopyView {
+                                                                    id: unpinnedScreencopy
+                                                                    anchors.centerIn: parent
+                                                                    captureSource: unpinnedWindowBtn.modelData
+                                                                    live: true
+                                                                    paintCursor: true
+                                                                    constraintSize: Qt.size(196, 120)
+                                                                    layer.enabled: true
+                                                                    layer.effect: OpacityMask {
+                                                                        maskSource: Rectangle {
+                                                                            width:  unpinnedScreencopy.width
+                                                                            height: unpinnedScreencopy.height
+                                                                            radius: Appearance.rounding.small
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 

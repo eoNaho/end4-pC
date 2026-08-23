@@ -23,7 +23,7 @@ Rectangle {
         { id: "rect",    icon: "crop_square",     tip: Translation.tr("Box") },
         { id: "ellipse", icon: "circle",          tip: Translation.tr("Ellipse") }
     ]
-    readonly property var palette: ["#ff5252", "#ffb300", "#4caf50", "#2196f3", "#ffffff", "#111111"]
+    readonly property var colorPalette: ["#ff5252", "#ffb300", "#4caf50", "#2196f3", "#ffffff", "#111111"]
     readonly property var widths: [2, 4, 8]
 
     implicitWidth: row.implicitWidth + Appearance.spacing.space200 * 2
@@ -72,7 +72,7 @@ Rectangle {
         Rectangle { implicitWidth: 1; implicitHeight: 24; color: Appearance.colors.colLayer0Border }
 
         Repeater {
-            model: bar.palette
+            model: bar.colorPalette
             delegate: RippleButton {
                 id: colorButton
                 required property string modelData

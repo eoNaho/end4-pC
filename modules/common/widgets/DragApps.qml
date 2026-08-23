@@ -31,6 +31,9 @@ Item {
     property int  activeDragVisualIndex: -1
     property bool _dragging: false
 
+    property real mouseGlobalX: -9999
+    property bool dockHovered: false
+
     onPinnedAppsChanged: {
         if (!_dragging) {
             _workOrder = pinnedApps.slice()
@@ -73,7 +76,7 @@ Item {
             property string appId:     root._workOrder[index] ?? ""
             property var    appEntry:  TaskbarApps.apps.find(a => a.appId === appId) ?? null
             property var    deskEntry: DesktopEntries.heuristicLookup(appId)
-            property bool   appActive: appEntry?.toplevels?.find(t => t.activated) !== undefined
+            property bool   appActive: (appEntry?.toplevels ?? []).some(t => t.activated === true)
             property int    _lastFocused: -1
 
             Connections {
@@ -97,6 +100,7 @@ Item {
             Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
             Behavior on scale   { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
+            // Ghost icon while dragging
             Item {
                 visible: dragHandler.active
                 z: 1000
@@ -143,7 +147,7 @@ Item {
                 id: dockBtn
                 anchors.fill: parent
 
-                property var appToplevel: slotItem.appEntry
+                property var appToplevel: slotItem.appEntry ?? { appId: slotItem.appId, toplevels: [] }
 
                 topInset:    Appearance.sizes.hyprlandGapsOut + 8
                 bottomInset: Appearance.sizes.hyprlandGapsOut + 8
@@ -173,23 +177,44 @@ Item {
                 }
 
                 middleClickAction: () => { if (slotItem.deskEntry) Quickshell.execDetached(["gtk-launch", slotItem.deskEntry.id]) }
-                altAction:         () => { TaskbarApps.togglePin(slotItem.appId) }
+                
+                altAction: () => {
+                    if (Config.options.dock?.showContextMenu ?? true) {
+                        contextMenu.active = !contextMenu.active
+                    }
+                }
 
                 contentItem: Item {
                     anchors.centerIn: parent
 
                     Item {
                         id: iconArea
-                        implicitWidth: 33
-                        implicitHeight: 33
-                        anchors.centerIn: parent
-                        scale: launchAnims.scale
+                        width: 33
+                        height: 33
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: dockBtn.hovered && (Config.options.dock?.magnification ?? true) ? -6 : 0
+                        scale: launchAnims.scale * (dockBtn.hovered && (Config.options.dock?.magnification ?? true) ? (Config.options.dock?.magnificationScale ?? 1.3) : 1.0)
                         rotation: launchAnims.rot
                         transformOrigin: Item.Center
 
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 180
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.2
+                            }
+                        }
+                        Behavior on anchors.verticalCenterOffset {
+                            NumberAnimation {
+                                duration: 180
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
                         IconImage {
                             id: appIcon
-                            anchors.centerIn: parent
+                            anchors.fill: parent
                             source: Quickshell.iconPath(
                                 AppSearch.guessIcon(slotItem.appId),
                                 "image-missing")
@@ -216,6 +241,7 @@ Item {
                         }
                     }
 
+                    // Running indicators
                     RowLayout {
                         spacing: 3
                         anchors {
@@ -223,17 +249,25 @@ Item {
                             topMargin: 2
                             horizontalCenter: parent.horizontalCenter
                         }
+                        visible: (slotItem.appEntry?.toplevels?.length ?? 0) > 0
+
                         Repeater {
                             model: Math.min(slotItem.appEntry?.toplevels?.length ?? 0, 3)
                             delegate: Rectangle {
                                 required property int index
                                 radius:         Appearance.rounding.full
-                                implicitWidth:  (slotItem.appEntry?.toplevels?.length ?? 0) <= 3
-                                                ? 10 : 4
+                                implicitWidth:  (slotItem.appEntry?.toplevels?.length === 1) ? 10 : 4
                                 implicitHeight: 4
                                 color: slotItem.appActive
                                        ? Appearance.colors.colPrimary
-                                       : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                       : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.45)
+                                
+                                Behavior on color {
+                                    ColorAnimation { duration: 150 }
+                                }
+                                Behavior on implicitWidth {
+                                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                                }
                             }
                         }
                     }
@@ -241,6 +275,12 @@ Item {
 
                 DockLaunchAnimations {
                     id: launchAnims
+                }
+
+                DockAppContextMenu {
+                    id: contextMenu
+                    hoverTarget: dockBtn
+                    appToplevel: slotItem.appEntry ?? { appId: slotItem.appId, toplevels: [] }
                 }
             }
 
@@ -301,7 +341,8 @@ Item {
         id: previewPopup
         property var appTopLevel: root.lastHoveredButton?.appToplevel ?? null
 
-        property bool shouldShow: WM.compositor === "hyprland"
+        property bool shouldShow: (Config.options.dock?.showWindowPreviews ?? true)
+                                  && WM.compositor === "hyprland"
                                   && (popupMouseArea.containsMouse || root.buttonHovered)
                                   && !root._dragging
                                   && appTopLevel
@@ -337,7 +378,7 @@ Item {
         }
 
         anchor {
-            window: root.QsWindow.window
+            window: root.QsWindow?.window ?? null
             adjustment: PopupAdjustment.None
             gravity: Edges.Top | Edges.Right
             edges: Edges.Top | Edges.Left
@@ -345,7 +386,7 @@ Item {
 
         visible: popupBackground.opacity > 0
         color: "transparent"
-        implicitWidth: root.QsWindow.window?.width ?? 1
+        implicitWidth: root.QsWindow?.window?.width ?? 1
         implicitHeight: popupMouseArea.implicitHeight
                         + root.windowControlsHeight
                         + Appearance.sizes.elevationMargin * 2
@@ -371,15 +412,17 @@ Item {
 
             Rectangle {
                 id: popupBackground
-                property real padding: 5
+                property real padding: 6
                 opacity: previewPopup.show ? 1 : 0
                 visible: opacity > 0
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 clip: true
-                color: Appearance.m3colors.m3surfaceContainer
-                radius: Appearance.rounding.normal
+                color: Appearance.colors.colLayer0
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+                radius: Appearance.rounding.large
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Appearance.sizes.elevationMargin
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -395,6 +438,7 @@ Item {
                 RowLayout {
                     id: previewRowLayout
                     anchors.centerIn: parent
+                    spacing: 8
 
                     Repeater {
                         model: ScriptModel {
@@ -403,52 +447,61 @@ Item {
 
                         RippleButton {
                             id: windowButton
-                            Layout.fillHeight: true
+                            Layout.preferredWidth: 210
+                            Layout.preferredHeight: 160
+                            implicitWidth: 210
+                            implicitHeight: 160
+                            clip: true
                             required property var modelData
                             padding: 0
+                            buttonRadius: Appearance.rounding.normal
 
                             middleClickAction: () => { windowButton.modelData?.close() }
                             onClicked: { windowButton.modelData?.activate() }
 
                             contentItem: ColumnLayout {
-                                implicitWidth:  screencopyView.implicitWidth
-                                implicitHeight: screencopyView.implicitHeight
+                                anchors.fill: parent
+                                spacing: 4
 
-                                ButtonGroup {
-                                    contentWidth: parent.width - anchors.margins * 2
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 8
+                                    Layout.rightMargin: 6
+                                    Layout.topMargin: 4
+                                    spacing: 4
 
                                     StyledText {
-                                        Layout.margins: 5
                                         Layout.fillWidth: true
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        text: windowButton.modelData?.title
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        text: windowButton.modelData?.title ?? ""
                                         elide: Text.ElideRight
-                                        color: Appearance.m3colors.m3onSurface
+                                        color: Appearance.colors.colOnLayer0
                                     }
 
-                                    GroupButton {
+                                    RippleButton {
                                         id: closeButton
-                                        colBackground: ColorUtils.transparentize(
-                                            Appearance.colors.colSurfaceContainer)
-                                        baseWidth:    root.windowControlsHeight
-                                        baseHeight:   root.windowControlsHeight
-                                        buttonRadius: Appearance.rounding.full
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colErrorContainer
+                                        implicitWidth:  22
+                                        implicitHeight: 22
+                                        buttonRadius:   Appearance.rounding.full
                                         contentItem: MaterialSymbol {
                                             anchors.centerIn: parent
                                             horizontalAlignment: Text.AlignHCenter
                                             text: "close"
-                                            iconSize: Appearance.font.pixelSize.normal
-                                            color: Appearance.m3colors.m3onSurface
+                                            iconSize: 14
+                                            color: closeButton.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer0
                                         }
                                         onClicked: { windowButton.modelData?.close() }
+                                        StyledToolTip { text: Translation.tr("Close") }
                                     }
                                 }
 
                                 Item {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    implicitHeight: screencopyView.height
-                                    implicitWidth:  screencopyView.width
+                                    Layout.bottomMargin: 6
+                                    clip: true
 
                                     ScreencopyView {
                                         id: screencopyView
@@ -456,9 +509,7 @@ Item {
                                         captureSource: windowButton.modelData
                                         live: true
                                         paintCursor: true
-                                        constraintSize: Qt.size(
-                                            root.maxWindowPreviewWidth,
-                                            root.maxWindowPreviewHeight)
+                                        constraintSize: Qt.size(196, 120)
                                         layer.enabled: true
                                         layer.effect: OpacityMask {
                                             maskSource: Rectangle {
