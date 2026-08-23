@@ -13,7 +13,7 @@ import qs.modules.common.functions as CF
 
 Item {
     id: root
-    property real contentPadding: 8
+    property real contentPadding: 10
     property int currentPage: 0
     property bool showingProfile: false
     property bool isMinimal: Config.options.settings.style === "minimal"
@@ -68,11 +68,11 @@ Item {
             { name: Translation.tr("Services"),   icon: "settings",       component: Qt.resolvedUrl("pages/ServicesConfig.qml") },
         ]
         if (WM.compositor === "hyprland") {
-                    list.push({ name: Translation.tr("Hyprland"), icon: "select_window_2", component: Qt.resolvedUrl("pages/HyprlandConfig.qml") })
-                }
+            list.push({ name: Translation.tr("Hyprland"), icon: "select_window_2", component: Qt.resolvedUrl("pages/HyprlandConfig.qml") })
+        }
         if (WM.compositor === "niri") {
-                    list.push({ name: Translation.tr("Niri"), icon: "select_window_2", component: Qt.resolvedUrl("pages/NiriConfig.qml") })
-                }
+            list.push({ name: Translation.tr("Niri"), icon: "select_window_2", component: Qt.resolvedUrl("pages/NiriConfig.qml") })
+        }
         list.push({ name: Translation.tr("About"), icon: "info", component: Qt.resolvedUrl("pages/About.qml") })
         return list
     }
@@ -103,9 +103,9 @@ Item {
                 id: navRailWrapper
                 Layout.fillHeight: true
                 Layout.margins: 0
-                implicitWidth: navRail.expanded ? 195 : fab.baseSize
+                implicitWidth: navRail.expanded ? 200 : fab.baseSize + 20
                 color: isMinimal ? "transparent" : Appearance.m3colors.m3surfaceContainerLow
-                radius: Appearance.rounding.normal
+                radius: Appearance.rounding.large
 
                 Behavior on implicitWidth {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -113,9 +113,18 @@ Item {
 
                 NavigationRail {
                     id: navRail
-                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: 20 }
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        top: parent.top
+                        bottom: parent.bottom
+                        leftMargin: 10
+                        rightMargin: 10
+                        topMargin: 10
+                        bottomMargin: 10
+                    }
                     spacing: 10
-                    expanded: root.width > 900
+                    expanded: root.width > 860
 
                     RowLayout {
                         visible: true

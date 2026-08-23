@@ -1,11 +1,9 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.services
 import qs.modules.common
 import qs.modules.common.functions
-
-// From https://github.com/caelestia-dots/shell with modifications.
-// License: GPLv3
 
 Image {
     id: root
@@ -14,18 +12,27 @@ Image {
     fillMode: Image.PreserveAspectFit
 
     source: {
-        if (!fileModelData.fileIsDir)
-            return Quickshell.iconPath("application-x-zerosize");
+        if (!fileModelData || !fileModelData.fileIsDir)
+            return Quickshell.iconPath("application-x-zerosize", "text-x-generic");
 
-        if ([Directories.documents, Directories.downloads, Directories.music, Directories.pictures, Directories.videos].some(dir => FileUtils.trimFileProtocol(dir) === fileModelData.filePath))
-            return Quickshell.iconPath(`folder-${fileModelData.fileName.toLowerCase()}`);
+        const iconName = XdgDirs.pathToIcon[fileModelData.filePath];
+        return Quickshell.iconPath(iconName ?? "folder", "folder");
+    }
 
-        return Quickshell.iconPath("inode-directory");
+    // Recalcula o source assim que os paths do xdg-user-dir chegarem
+    // (eles resolvem de forma assíncrona, podem terminar depois do primeiro paint)
+    Connections {
+        target: XdgDirs
+        function onPathToIconChanged() {
+            const iconName = XdgDirs.pathToIcon[fileModelData.filePath];
+            if (iconName)
+                root.source = Quickshell.iconPath(iconName, "folder");
+        }
     }
 
     onStatusChanged: {
-        if (status === Image.Error)
-            source = Quickshell.iconPath("error");
+        if (status === Image.Error && source != Quickshell.iconPath("folder"))
+            source = Quickshell.iconPath("folder");
     }
 
     Process {

@@ -12,7 +12,7 @@ MouseArea {
 
     required property var fileModelData
     property bool isDirectory: fileModelData.fileIsDir
-    property bool useThumbnail: Images.isValidImageByName(fileModelData.fileName)
+    property bool useThumbnail: !isDirectory && Images.isValidImageByName(fileModelData.fileName)
     property alias colBackground: background.color
     property alias colText: wallpaperItemName.color
     property alias radius: background.radius

@@ -250,8 +250,10 @@ ContentPage {
             title: Translation.tr("Bar & Screen")
             shape: MaterialShape.Shape.ClamShell
             Layout.fillWidth: true
-            visible: isMinimal
+
             GroupedList {
+                Layout.fillWidth: true
+
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     icon: "position_bottom_right"
@@ -268,6 +270,7 @@ ContentPage {
                         { displayName: Translation.tr("Right"), icon: "arrow_forward",  value: 3 }
                     ]
                 }
+
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     icon: "settop_component"
@@ -281,6 +284,7 @@ ContentPage {
                         { displayName: Translation.tr("M3"), icon: "interests",  value: 3 }
                     ]
                 }
+
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     icon: "tab_group"
@@ -293,6 +297,7 @@ ContentPage {
                         { displayName: Translation.tr("Separated"), icon: "view_column_2", value: "separated" }
                     ]
                 }
+
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     icon: "rounded_corner"
@@ -304,194 +309,6 @@ ContentPage {
                         { displayName: Translation.tr("Yes"),                 icon: "check",           value: 1 },
                         { displayName: Translation.tr("When not fullscreen"), icon: "fullscreen_exit", value: 2 }
                     ]
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "screenshot_monitor"
-            title: Translation.tr("Bar & Screen")
-            shape: MaterialShape.Shape.ClamShell
-            Layout.fillWidth: true
-            visible: !isMinimal
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                rowSpacing: 8
-                columnSpacing: 8
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: barPosCol.implicitHeight + 24
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-                    border.width: 1
-                    border.color: "transparent"
-
-                    ColumnLayout {
-                        id: barPosCol
-                        anchors { fill: parent; margins: 12 }
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 6
-                            MaterialSymbol {
-                                text: "swap_vert"
-                                iconSize: Appearance.font.pixelSize.normal + 4
-                                color: Appearance.colors.colOnLayer1
-                            }
-                            StyledText {
-                                text: Translation.tr("Bar position")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer1
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        ConfigSelectionArray {
-                            id: barPosArray
-                            Layout.fillWidth: false
-                            Layout.alignment: Qt.AlignRight
-                            currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
-                            onSelected: newValue => {
-                                Config.options.bar.bottom = (newValue & 1) !== 0;
-                                Config.options.bar.vertical = (newValue & 2) !== 0;
-                            }
-                            options: [
-                                { displayName: Translation.tr("Top"), icon: "arrow_upward",   value: 0 },
-                                { displayName: Translation.tr("Left"), icon: "arrow_back",     value: 2 },
-                                { displayName: Translation.tr("Bottom"), icon: "arrow_downward", value: 1 },
-                                { displayName: Translation.tr("Right"), icon: "arrow_forward",  value: 3 }
-                            ]
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: barStyleCol.implicitHeight + 24
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-                    border.width: 1
-                    border.color: "transparent"
-
-                    ColumnLayout {
-                        id: barStyleCol
-                        anchors { fill: parent; margins: 12 }
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 6
-                            MaterialSymbol {
-                                text: "settop_component"
-                                iconSize: Appearance.font.pixelSize.normal + 4
-                                color: Appearance.colors.colOnLayer1
-                            }
-                            StyledText {
-                                text: Translation.tr("Bar style")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer1
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        ConfigSelectionArray {
-                            id: barStyleArray
-                            Layout.fillWidth: false
-                            Layout.alignment: Qt.AlignRight
-                            currentValue: Config.options.bar.cornerStyle
-                            onSelected: newValue => { Config.options.bar.cornerStyle = newValue; }
-                            options: [
-                                { displayName: Translation.tr("Hug"), icon: "line_curve", value: 0 },
-                                { displayName: Translation.tr("Float"), icon: "view_day",   value: 1 },
-                                { displayName: Translation.tr("Islands"), icon: "crop_3_2",   value: 2 },
-                                { displayName: Translation.tr("M3"), icon: "interests",  value: 3 }
-                            ]
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: screenRoundCol.implicitHeight + 24
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-                    ColumnLayout {
-                        id: groupStyleCol
-                        anchors { fill: parent; margins: 12 }
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 6
-                            MaterialSymbol {
-                                text: "tab_group"
-                                iconSize: Appearance.font.pixelSize.normal + 4
-                                color: Appearance.colors.colOnLayer1
-                            }
-                            StyledText {
-                                text: Translation.tr("Group style")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer1
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        ConfigSelectionArray {
-                            id: groupStyleArray
-                            Layout.fillWidth: false
-                            Layout.alignment: Qt.AlignRight
-                            currentValue: Config.options.bar.borderless
-                            onSelected: newValue => { Config.options.bar.borderless = newValue; }
-                            options: [
-                                { displayName: Translation.tr("No"),          icon: "close",         value: "transparent" },
-                                { displayName: Translation.tr("Pills"),     icon: "pill",          value: "pills" },
-                                { displayName: Translation.tr("Separated"), icon: "view_column_2", value: "separated" }
-                            ]
-                        }
-                    }
-                    
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: groupStyleCol.implicitHeight + 24
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colLayer1
-
-                    ColumnLayout {
-                        id: screenRoundCol
-                        anchors { fill: parent; margins: 12 }
-                        spacing: 8
-
-                        RowLayout {
-                            spacing: 6
-                            MaterialSymbol {
-                                text: "rounded_corner"
-                                iconSize: Appearance.font.pixelSize.normal + 4
-                                color: Appearance.colors.colOnLayer1
-                            }
-                            StyledText {
-                                text: Translation.tr("Screen round corner")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer1
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        ConfigSelectionArray {
-                            id: screenRoundArray
-                            Layout.fillWidth: false
-                            Layout.alignment: Qt.AlignRight
-                            currentValue: Config.options.appearance.fakeScreenRounding
-                            onSelected: newValue => { Config.options.appearance.fakeScreenRounding = newValue; }
-                            options: [
-                                { displayName: Translation.tr("No"),                  icon: "close",           value: 0 },
-                                { displayName: Translation.tr("Yes"),                 icon: "check",           value: 1 },
-                                { displayName: Translation.tr("When not fullscreen"), icon: "fullscreen_exit", value: 2 }
-                            ]
-                        }
-                    }
                 }
             }
         }

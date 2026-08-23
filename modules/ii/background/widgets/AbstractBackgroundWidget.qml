@@ -32,10 +32,15 @@ AbstractWidget {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
-    draggable: placementStrategy === "free" && !Config.options.background.widgetsLocked
+    draggable: !Config.options.background.widgetsLocked
     function restoreXYBinding() {
         root.x = Qt.binding(() => root.targetX);
         root.y = Qt.binding(() => root.targetY);
+    }
+
+    onDragFinished: {
+        if (root.configEntry.placementStrategy !== "free")
+            root.configEntry.placementStrategy = "free"
     }
 
     onReleased: {
@@ -52,7 +57,7 @@ AbstractWidget {
     property color colText: {
         const onNormalBackground = (GlobalStates.screenLocked && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12))
-        return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
+        return onNormalBackground ? Appearance.colors.colBackground : adaptiveColor;
     }
 
     property bool wallpaperIsVideo: Config.options.background.wallpaperPath.endsWith(".mp4") || Config.options.background.wallpaperPath.endsWith(".webm") || Config.options.background.wallpaperPath.endsWith(".mkv") || Config.options.background.wallpaperPath.endsWith(".avi") || Config.options.background.wallpaperPath.endsWith(".mov")
@@ -64,12 +69,35 @@ AbstractWidget {
         target: Config
         function onReadyChanged() { refreshPlacementIfNeeded() }
     }
+    property bool pendingPlacementRefresh: false
+    property string activePlacementStrategy: ""
+    function leastBusyRegionCommand() {
+        return [Quickshell.shellPath("scripts/images/least-busy-region-venv.sh")
+            , "--screen-width", Math.round(root.scaledScreenWidth)
+            , "--screen-height", Math.round(root.scaledScreenHeight)
+            , "--width", leastBusyRegionProc.contentWidth
+            , "--height", leastBusyRegionProc.contentHeight
+            , "--horizontal-padding", leastBusyRegionProc.horizontalPadding
+            , "--vertical-padding", leastBusyRegionProc.verticalPadding
+            , root.wallpaperPath
+            , ...(root.placementStrategy === "mostBusy" ? ["--busiest"] : [])
+        ];
+    }
+    function startLeastBusyRegionProc() {
+        root.activePlacementStrategy = root.placementStrategy;
+        leastBusyRegionProc.command = root.leastBusyRegionCommand();
+        leastBusyRegionProc.running = true;
+    }
     function refreshPlacementIfNeeded() {
         if (!Config.ready) return;
         if (root.placementStrategy === "free" && !root.needsColText) return;
         leastBusyRegionProc.wallpaperPath = root.wallpaperPath;
-        leastBusyRegionProc.running = false;
-        leastBusyRegionProc.running = true;
+        if (leastBusyRegionProc.running) {
+            root.pendingPlacementRefresh = true;
+            leastBusyRegionProc.running = false;
+        } else {
+            root.startLeastBusyRegionProc();
+        }
     }
     Process {
         id: leastBusyRegionProc
@@ -79,23 +107,19 @@ AbstractWidget {
         property int contentHeight: 300
         property int horizontalPadding: 200
         property int verticalPadding: 200
-        command: [Quickshell.shellPath("scripts/images/least-busy-region-venv.sh") // Comments to force the formatter to break lines
-            , "--screen-width", Math.round(root.scaledScreenWidth) //
-            , "--screen-height", Math.round(root.scaledScreenHeight) //
-            , "--width", contentWidth //
-            , "--height", contentHeight //
-            , "--horizontal-padding", horizontalPadding //
-            , "--vertical-padding", verticalPadding //
-            , wallpaperPath //
-            , ...(root.placementStrategy === "mostBusy" ? ["--busiest"] : [])
-            // "--visual-output",
-        ]
+        onRunningChanged: {
+            if (!leastBusyRegionProc.running && root.pendingPlacementRefresh) {
+                root.pendingPlacementRefresh = false;
+                root.startLeastBusyRegionProc();
+            }
+        }
         stdout: StdioCollector {
             id: leastBusyRegionOutputCollector
             onStreamFinished: {
                 const output = leastBusyRegionOutputCollector.text;
                 // console.log("[Background] Least busy region output:", output)
-                if (output.length === 0) return;
+                if (output === "") return;
+                if (root.activePlacementStrategy !== root.placementStrategy) return;
                 const parsedContent = JSON.parse(output);
                 root.dominantColor = parsedContent.dominant_color || Appearance.colors.colPrimary;
                 if (root.placementStrategy === "free") return;

@@ -133,6 +133,14 @@ Scope {
             root.toggleWallpaperSelector();
         }
 
+        function open(): void {
+            GlobalStates.wallpaperSelectorOpen = true;
+        }
+
+        function close(): void {
+            GlobalStates.wallpaperSelectorOpen = false;
+        }
+
         function random(): void {
             Wallpapers.randomFromCurrentFolder();
         }
