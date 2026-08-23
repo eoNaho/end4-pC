@@ -60,6 +60,9 @@ ContentPage {
         { id: "pomodoroBarButton",  name: Translation.tr("Pomodoro & Timer"),    icon: "timer" },
         { id: "audioSinkSelector",  name: Translation.tr("Audio Sink Switcher"), icon: "speaker" },
         { id: "privacyIndicator",   name: Translation.tr("Privacy Indicator"),   icon: "security" },
+        { id: "specialWorkspaceButton", name: Translation.tr("Scratchpad (Special Workspace)"), icon: "inventory_2" },
+        { id: "recordingGallery",   name: Translation.tr("Captures Gallery"),    icon: "photo_library" },
+        { id: "vpnIndicator",       name: Translation.tr("VPN Status"),          icon: "vpn_lock" },
     ]
 
     function availableFor() {

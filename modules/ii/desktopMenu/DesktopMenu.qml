@@ -94,7 +94,7 @@ Scope {
 
             property Component openSubmenuComponent: null
             property real submenuAnchorY: 0
-            property real submenuWidth: 284
+            property real submenuWidth: 320
 
             Timer {
                 id: submenuCloseTimer

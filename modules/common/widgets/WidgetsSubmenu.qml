@@ -23,6 +23,9 @@ Item {
         { key: "worldClock",  icon: "public",             name: Translation.tr("World Clock") },
         { key: "userCard",    icon: "person",             name: Translation.tr("User Card") },
         { key: "notes",       icon: "note_stack_add",     name: Translation.tr("Notes") },
+        { key: "pomodoro",    icon: "timer",              name: Translation.tr("Pomodoro & Timer") },
+        { key: "captures",    icon: "photo_library",      name: Translation.tr("Captures") },
+        { key: "vpn",         icon: "vpn_lock",           name: Translation.tr("VPN & Network") },
     ]
 
     Rectangle {

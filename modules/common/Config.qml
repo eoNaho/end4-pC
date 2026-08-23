@@ -352,6 +352,27 @@ Singleton {
                         property real y: 500
                         property string sizeMode: "1x3" 
                     }
+
+                    property JsonObject pomodoro: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 200
+                    }
+
+                    property JsonObject captures: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 200
+                    }
+
+                    property JsonObject vpn: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 200
+                    }
                 }
                 property list<string> screenList: [] 
                 property string wallpaperPath: ""

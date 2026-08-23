@@ -1058,8 +1058,27 @@ ContentPage {
                         },
                         {
                             icon: "note_stack_add",
+                            key: "notes",
                             name: Translation.tr("Notes"),
                             enabled: Config.options.background.widgets.notes.enable
+                        },
+                        {
+                            icon: "timer",
+                            key: "pomodoro",
+                            name: Translation.tr("Pomodoro & Timer"),
+                            enabled: Config.options.background.widgets.pomodoro.enable
+                        },
+                        {
+                            icon: "photo_library",
+                            key: "captures",
+                            name: Translation.tr("Captures"),
+                            enabled: Config.options.background.widgets.captures.enable
+                        },
+                        {
+                            icon: "vpn_lock",
+                            key: "vpn",
+                            name: Translation.tr("VPN & Network"),
+                            enabled: Config.options.background.widgets.vpn.enable
                         }
                     ]
                     delegate: Rectangle {
@@ -1089,7 +1108,9 @@ ContentPage {
                                     Layout.fillWidth: false
                                     checked: modelData.enabled
                                     onCheckedChanged: {
-                                        if (modelData.icon === "weather_mix")
+                                        if (modelData.key && Config.options.background.widgets[modelData.key]) {
+                                            Config.options.background.widgets[modelData.key].enable = checked;
+                                        } else if (modelData.icon === "weather_mix")
                                             Config.options.background.widgets.weather.enable = checked
                                         else if (modelData.icon === "image")
                                             Config.options.background.widgets.images.enable = checked
