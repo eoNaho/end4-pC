@@ -53,7 +53,7 @@ Singleton {
                     label=$(cat "$temp_label" 2>/dev/null)
                     case "$label" in
                         "Tctl"|"Tdie"|"Package id 0")
-                            input="${temp_label%_label}_input"
+                            input="\${temp_label%_label}_input"
                             [ -f "$input" ] && awk '{printf "%.1f", $1/1000}' "$input" && exit 0
                             ;;
                     esac

@@ -146,11 +146,17 @@ Button {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
-        layer.enabled: true
+        layer.enabled: (ripple.visible && ripple.opacity > 0.01)
         layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: buttonBackground.width
-                height: buttonBackground.height
+            maskSource: buttonMask
+        }
+
+        Item {
+            id: buttonMask
+            anchors.fill: parent
+            visible: false
+            Rectangle {
+                anchors.fill: parent
                 radius: root.buttonEffectiveRadius
             }
         }

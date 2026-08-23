@@ -228,7 +228,7 @@ Singleton {
             "python3",
             `${Directories.scriptPath}/lyrics/lyrics.py`,
             title, artist, String(Math.floor(duration)),
-            "--providers", Config.options.lyrics.providers
+            "--providers", Config.options?.lyrics?.providers ?? "netease,lrclib"
         ]
         lyricsProc.running = true
     }

@@ -41,15 +41,13 @@ Item {
 
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property var realPlayers: MprisController.players
-    readonly property var meaningfulPlayers: {
-        const preferred = Config.options.bar.media.preferredPlayer.trim().toLowerCase()
-        if (preferred.length === 0) return filterDuplicatePlayers(realPlayers)
-        const filtered = realPlayers.filter(p =>
-            (p.identity ?? "").toLowerCase().includes(preferred) ||
-            (p.desktopEntry ?? "").toLowerCase().includes(preferred)
+    function filterDuplicatePlayers(players) {
+        if (!Config.options?.bar?.media?.filterDuplicatePlayers) return players;
+        return Array.from(players.values ?? players).filter((player, index, self) =>
+            index === self.findIndex((t) => (
+                t.identity === player.identity && t.trackTitle === player.trackTitle
+            ))
         )
-        if (filtered.length === 0) return filterDuplicatePlayers(realPlayers)
-        return filterDuplicatePlayers(filtered)
     }
 
     Connections {

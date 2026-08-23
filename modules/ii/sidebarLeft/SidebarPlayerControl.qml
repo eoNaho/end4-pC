@@ -98,9 +98,15 @@ Item {
 
                 layer.enabled: true
                 layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: artBackground.width
-                        height: artBackground.height
+                    maskSource: artMask
+                }
+
+                Item {
+                    id: artMask
+                    anchors.fill: parent
+                    visible: false
+                    Rectangle {
+                        anchors.fill: parent
                         radius: artBackground.radius
                     }
                 }
@@ -113,6 +119,7 @@ Item {
                     antialiasing: true
                     sourceSize.width: artBackground.width * 2
                     sourceSize.height: artBackground.height * 2
+                    visible: status === Image.Ready && source != ""
                 }
 
                 MaterialSymbol {
