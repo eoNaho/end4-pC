@@ -12,7 +12,7 @@ import Quickshell.Io
 DockButton {
     id: root
 
-    property bool isHovered: hoverHandler.hovered
+    property bool isHovered: root.hovered
     property bool isEmpty: true
 
     implicitWidth: implicitHeight - topInset - bottomInset

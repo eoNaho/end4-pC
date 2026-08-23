@@ -55,4 +55,5 @@ Scope {
     PanelLoader { component: DropShelfPanel {} }
     PanelLoader { component: NiriBackdrop {} }
     PanelLoader { component: ScreenFrame {} }
+    PanelLoader { component: Win11StartMenu {} }
 }

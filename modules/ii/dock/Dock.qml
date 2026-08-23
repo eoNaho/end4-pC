@@ -31,11 +31,13 @@ Scope {
 
             property bool reveal: {
                 if (fullscreenOnThisMonitor)
-                    return Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse
+                    return (Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse)
+                        || GlobalStates.startMenuOpen
                 return root.pinned
                     || (Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse)
                     || activeAppsArea.requestDockShow
                     || dragSlots.requestDockShow
+                    || GlobalStates.startMenuOpen
                     || (!ToplevelManager.activeToplevel?.activated)
             }
 
@@ -437,7 +439,7 @@ Scope {
                                 Layout.fillHeight: true
                                 Layout.topMargin: 0
                                 visible: Config.options.dock.showAppsButton
-                                onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+                                onClicked: GlobalStates.startMenuOpen = !GlobalStates.startMenuOpen
                                 topInset:    dockRow.padding + 10
                                 bottomInset: dockRow.padding + 7
                                 contentItem: MaterialSymbol {
