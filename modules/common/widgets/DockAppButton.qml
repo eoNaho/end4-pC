@@ -76,7 +76,7 @@ DockButton {
 
     altAction: () => {
         if (Config.options.dock?.showContextMenu ?? true) {
-            contextMenu.active = !contextMenu.active;
+            contextMenu.active = true;
         }
     }
 

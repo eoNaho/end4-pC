@@ -217,6 +217,17 @@ Scope {
                                             bottomInset: dockRow.padding + 8
                                         }
                                     }
+
+                                    DockSeparator {
+                                        visible: true
+                                    }
+
+                                    DockTrashButton {
+                                        Layout.fillHeight: true
+                                        Layout.topMargin: 2
+                                        topInset: dockRow.padding + 8
+                                        bottomInset: dockRow.padding + 8
+                                    }
                                 }
 
                                 QtObject {

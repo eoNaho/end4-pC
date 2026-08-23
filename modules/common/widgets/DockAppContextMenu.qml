@@ -35,10 +35,36 @@ PopupWindow {
     implicitWidth: menuCard.implicitWidth + Appearance.sizes.elevationMargin * 2
     implicitHeight: menuCard.implicitHeight + Appearance.sizes.elevationMargin * 2 + 8
 
+    Timer {
+        id: autoCloseTimer
+        interval: 350
+        repeat: false
+        onTriggered: {
+            if (!menuMouseArea.containsMouse && (!root.hoverTarget || !root.hoverTarget.hovered)) {
+                root.active = false;
+                root.closeRequested();
+            }
+        }
+    }
+
+    Connections {
+        target: root.hoverTarget
+        function onHoveredChanged() {
+            if (root.hoverTarget && !root.hoverTarget.hovered && !menuMouseArea.containsMouse) {
+                autoCloseTimer.restart();
+            }
+        }
+    }
+
     MouseArea {
         id: menuMouseArea
         anchors.fill: parent
         hoverEnabled: true
+        onExited: {
+            if (!root.hoverTarget || !root.hoverTarget.hovered) {
+                autoCloseTimer.restart();
+            }
+        }
 
         StyledRectangularShadow {
             target: menuCard
@@ -165,6 +191,49 @@ PopupWindow {
                     }
                 }
 
+                // Desktop Actions
+                Repeater {
+                    model: root.desktopEntry?.actions ?? []
+                    delegate: RippleButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 32
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                        onClicked: {
+                            if (typeof modelData.execute === "function") {
+                                modelData.execute();
+                            } else if (typeof modelData.exec === "function") {
+                                modelData.exec();
+                            }
+                            root.active = false;
+                            root.closeRequested();
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            MaterialSymbol {
+                                text: "bolt"
+                                iconSize: 18
+                                color: Appearance.colors.colPrimary
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelData.name
+                                color: Appearance.colors.colOnLayer0
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+                }
+
                 // Running windows section
                 Loader {
                     Layout.fillWidth: true
@@ -235,7 +304,7 @@ PopupWindow {
                                         }
                                         MaterialSymbol {
                                             anchors.centerIn: parent
-                                            text: "close"
+                                             text: "close"
                                             iconSize: 14
                                             color: parent.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer1
                                         }
