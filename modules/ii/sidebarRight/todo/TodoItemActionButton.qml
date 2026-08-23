@@ -17,12 +17,22 @@ RippleButton {
     }
 
     buttonRadius: Appearance.rounding.small
+    property bool spinning: false
 
     contentItem: StyledText {
         text: buttonText
         horizontalAlignment: Text.AlignHCenter
         font.pixelSize: Appearance.font.pixelSize.larger
         color: Appearance.colors.colOnLayer1
+    }
+
+    RotationAnimation {
+        target: button.contentItem
+        from: 0
+        to: 360
+        duration: 800
+        loops: Animation.Infinite
+        running: button.spinning
     }
 
     StyledToolTip {

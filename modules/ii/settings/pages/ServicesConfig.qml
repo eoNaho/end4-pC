@@ -377,6 +377,33 @@ ContentPage {
                 }
             }
         }
+
+        ContentSection {
+            icon: "cloud_sync"
+            shape: MaterialShape.Shape.Diamond
+            title: Translation.tr("Google Services & Sync")
+
+            GroupedList {
+                ConfigSwitch {
+                    buttonIcon: "login"
+                    text: Translation.tr("Connect Google Account")
+                    checked: GoogleService.loggedIn
+                    onClicked: {
+                        GoogleService.login();
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "sync"
+                    text: Translation.tr("Sync Tasks & Calendar Now")
+                    checked: false
+                    onClicked: {
+                        GoogleService.sync();
+                    }
+                }
+            }
+        }
+
         WorldMap {
             Layout.fillWidth: true
             Layout.preferredHeight: 300

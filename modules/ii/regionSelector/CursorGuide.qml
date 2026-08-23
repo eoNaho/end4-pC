@@ -52,7 +52,27 @@ Item {
         descTimeout.restart()
     }
 
-    property int margins: 8
+    property bool shown: true
+    opacity: root.shown ? 1 : 0
+    scale: root.shown ? 1 : 0.7
+    visible: opacity > 0.01
+    transformOrigin: Item.TopLeft
+    Behavior on opacity {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.expressiveEffects
+        }
+    }
+    Behavior on scale {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+        }
+    }
+
+    property int margins: Appearance.spacing.space100
     implicitWidth: content.implicitWidth + margins * 2
     implicitHeight: content.implicitHeight + margins * 2
 

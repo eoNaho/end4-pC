@@ -87,6 +87,9 @@ function getCalendarLayout(dateObject, highlight) {
     while (i < 6 && j < 7) {
         calendar[i][j] = {
             "day": toFill,
+            "month": (month - 1) + monthDiff,
+            "year": year,
+            "dateObject": new Date(year, (month - 1) + monthDiff, toFill),
             "today": ((toFill == day && monthDiff == 0 && highlight) ? 1 : (
                 monthDiff == 0 ? 0 : -1
             ))

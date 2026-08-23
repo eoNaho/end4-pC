@@ -17,6 +17,7 @@ Rectangle {
     property int selectedTab: Persistent.states.sidebar.bottomGroup.tab
     property int previousIndex: -1
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed
+    signal dateSelected(var date)
     property var tabs: [
         {
             "type": "calendar",
@@ -201,6 +202,14 @@ Rectangle {
 
                 Component.onCompleted: {
                     tabStack.source = root.tabs[root.selectedTab].widget;
+                }
+
+                Connections {
+                    target: tabStack.item
+                    ignoreUnknownSignals: true
+                    function onDateSelected(date) {
+                        root.dateSelected(date);
+                    }
                 }
 
                 Connections {

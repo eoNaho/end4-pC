@@ -6,11 +6,13 @@ import QtQuick
 import QtQuick.Layouts
 
 Item {
+    id: root
     // Layout.topMargin: 10
     anchors.topMargin: 10
     property int monthShift: 0
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0)
+    signal dateSelected(var date)
     width: calendarColumn.width
     implicitHeight: calendarColumn.height + 10 * 2
 
@@ -114,6 +116,8 @@ Item {
                     delegate: CalendarDayButton {
                         day: calendarLayout[modelData][index].day
                         isToday: calendarLayout[modelData][index].today
+                        dateObject: calendarLayout[modelData][index].dateObject
+                        onDayClicked: (date) => root.dateSelected(date)
                     }
                 }
             }

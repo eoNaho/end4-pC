@@ -672,7 +672,7 @@ Singleton {
                 property bool showItemId: false
                 property bool invertPinnedItems: true // Makes the below a whitelist for the tray and blacklist for the pinned area
                 property list<var> pinnedItems: [ "Fcitx" ]
-                property bool filterPassive: true
+                property bool filterPassive: false
             }
 
             property JsonObject musicRecognition: JsonObject {
@@ -765,17 +765,24 @@ Singleton {
                 }
             }
 
-            property JsonObject custom: JsonObject {
-                property string distroIcon: "spark"
-                property bool colorizeIcon: true
-            }
-
             property JsonObject screenRecord: JsonObject {
                 property string savePath: Directories.videos.replace("file://","") // strip "file://"
             }
 
             property JsonObject screenSnip: JsonObject {
                 property string savePath: "" // only copy to clipboard when empty
+            }
+
+            property JsonObject screenshotResult: JsonObject {
+                property bool enable: true
+                property int timeoutMs: 6000
+                // Annotation tool override; [] = auto-detect (swappy, then satty).
+                property list<string> editorCommand: []
+            }
+
+            property JsonObject custom: JsonObject {
+                property string distroIcon: "spark"
+                property bool colorizeIcon: true
             }
 
             property JsonObject sounds: JsonObject {

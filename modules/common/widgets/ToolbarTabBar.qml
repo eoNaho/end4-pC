@@ -9,7 +9,9 @@ import QtQuick.Layouts
 Item {
     id: root
     property alias currentIndex: tabBar.currentIndex
+    property color activeColor: Appearance.colors.colSecondaryContainer
     required property var tabButtonList
+    signal tabClicked(int index)
 
     function incrementCurrentIndex() {
         tabBar.incrementCurrentIndex();
@@ -29,10 +31,12 @@ Item {
         required property int index
         required property var modelData
         current: index == root.currentIndex
+        isError: modelData.isError ?? false
         text: modelData.name
         materialSymbol: modelData.icon
         onClicked: {
             root.setCurrentIndex(index);
+            root.tabClicked(index);
         }
     }
 
@@ -51,7 +55,7 @@ Item {
     Rectangle {
         id: activeIndicator
         z: 0
-        color: Appearance.colors.colSecondaryContainer
+        color: root.activeColor
         implicitWidth: contentItem.children[root.currentIndex]?.implicitWidth ?? 0
         implicitHeight: contentItem.children[root.currentIndex]?.implicitHeight ?? 0
         radius: height / 2

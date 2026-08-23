@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.modules.common
 import qs.modules.common.utils
 import qs.modules.common.functions
@@ -10,6 +11,7 @@ import Qt.labs.synchronizer
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 PanelWindow {
     id: root
@@ -30,7 +32,7 @@ PanelWindow {
     // TODO: Ask: sidebar AI
     enum SnipAction { Copy, Edit, Search, CharRecognition, Record, RecordWithSound } 
     enum SelectionMode { RectCorners, Circle }
-    enum Phase { Select, Post }
+    enum Phase { Select, Annotate, Post }
     property var action: RegionSelection.SnipAction.Copy
     property var selectionMode: RegionSelection.SelectionMode.RectCorners
     property var phase: RegionSelection.Phase.Select
@@ -62,13 +64,14 @@ PanelWindow {
     readonly property real falsePositivePreventionRatio: 0.5
 
     // Screen & interaction vars
-    readonly property var monitor: WM.monitorFor(screen)
-    readonly property var monitorGeometry: WM.monitorGeometry(screen)
-    readonly property real monitorScale: monitorGeometry.scale
-    readonly property real monitorOffsetX: monitorGeometry.x
-    readonly property real monitorOffsetY: monitorGeometry.y
-    property int activeWorkspaceId: WM.activeWorkspaceForMonitor(root.monitor?.name)?.id ?? 0
+    readonly property HyprlandMonitor hyprlandMonitor: Hyprland.monitorFor(screen)
+    readonly property real monitorScale: hyprlandMonitor.scale
+    readonly property real monitorOffsetX: hyprlandMonitor.x
+    readonly property real monitorOffsetY: hyprlandMonitor.y
+    property int activeWorkspaceId: hyprlandMonitor.activeWorkspace?.id ?? 0
     property string screenshotPath: `${root.screenshotDir}/image-${screen.name}`
+    property url screenshotSource: ""
+    property bool screenshotReady: false
     property real dragStartX: 0
     property real dragStartY: 0
     property real draggingX: 0
@@ -92,7 +95,7 @@ PanelWindow {
         }
     })
     readonly property list<var> layerRegions: {
-        const layersOfThisMonitor = root.layers[root.monitor?.name]
+        const layersOfThisMonitor = root.layers[root.hyprlandMonitor.name]
         const topLayers = layersOfThisMonitor?.levels["2"]
         if (!topLayers) return [];
         const nonBarTopLayers = topLayers
@@ -118,7 +121,7 @@ PanelWindow {
     property bool isCircleSelection: (root.selectionMode === RegionSelection.SelectionMode.Circle)
     property bool enableWindowRegions: Config.options.regionSelector.targetRegions.windows && !isCircleSelection
     property bool enableLayerRegions: Config.options.regionSelector.targetRegions.layers && !isCircleSelection
-    property bool enableContentRegions: Config.options.regionSelector.targetRegions.content
+    property bool enableContentRegions: Config.options.regionSelector.targetRegions.content && !isCircleSelection
 
     // Target
     property real targetedRegionX: -1
@@ -192,39 +195,38 @@ PanelWindow {
         screenshotDir: root.screenshotDir
         screenshotPath: root.screenshotPath
         onExited: (exitCode, exitStatus) => {
-            if (root.enableContentRegions) imageDetectionProcess.running = true;
-            root.preparationDone = !checkRecordingProc.running;
+            if (exitCode !== 0) {
+                console.warn(`[Region Selector] grim failed with exit code ${exitCode}; aborting capture.`);
+                Quickshell.execDetached(["notify-send", "Screenshot failed", "Could not capture a fresh frame. Please try again.", "-a", "Quickshell"]);
+                root.dismiss();
+                return;
+            }
+            // Preview the exact file that later gets cropped.
+            root.screenshotSource = Qt.resolvedUrl(root.screenshotPath)
+                + `?capture=${Date.now()}`;
         }
     }
     property bool isRecording: root.action === RegionSelection.SnipAction.Record || root.action === RegionSelection.SnipAction.RecordWithSound
-    property bool recordingShouldStop: false
-    Process {
-        id: checkRecordingProc
-        running: isRecording
-        command: ["pidof", "wf-recorder"]
-        onExited: (exitCode, exitStatus) => {
-            root.preparationDone = !screenshotProc.running
-            root.recordingShouldStop = (exitCode === 0);
-        }
+
+    // Whole-output capture: the same confirm path every other target takes,
+    // handed the screen's own rect. There is no separate full-screen code -
+    // `snip()` crops the frozen frame it already has, and a region covering
+    // the output is a crop of everything.
+    function snipFullScreen() {
+        root.regionX = 0;
+        root.regionY = 0;
+        root.regionWidth = root.width;
+        root.regionHeight = root.height;
+        root.snip();
     }
     property bool preparationDone: false
+    function finishPreparationIfReady() {
+        if (!root.screenshotReady) return;
+        root.preparationDone = true;
+    }
     onPreparationDoneChanged: {
         if (!preparationDone) return;
-        if (root.isRecording && root.recordingShouldStop) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
-            root.dismiss();
-            return;
-        }
         root.visible = true;
-    }
-
-    Connections {
-        target: Persistent.states.record
-        function onEnableChanged() {
-            if (!Persistent.states.record.enable && root.isRecording) {
-                root.dismiss();
-            }
-        }
     }
 
     Process {
@@ -263,22 +265,59 @@ PanelWindow {
                 console.warn("[Region Selector] Unknown snip action, skipping snip.");
                 root.dismiss();
                 return;
+            }
+    }
+
+    function clampRegion() {
+        root.regionX = Math.max(0, Math.min(root.regionX, root.screen.width - root.regionWidth));
+        root.regionY = Math.max(0, Math.min(root.regionY, root.screen.height - root.regionHeight));
+        root.regionWidth = Math.max(0, Math.min(root.regionWidth, root.screen.width - root.regionX));
+        root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
+    }
+
+    // Annotated copy: composite the cropped screenshot + canvas at native
+    // resolution via grabToImage, then reuse the observable copy pipeline.
+    function finishAnnotated() {
+        if (!annotationLoader.item || !annotationLoader.item.hasAnnotations) {
+            // Nothing drawn: the plain pipeline crops losslessly with magick.
+            root.snip();
+            return;
         }
+        const screenshotDir = Config.options.screenSnip.savePath !== ""
+            ? Config.options.screenSnip.savePath : root.screenshotDir;
+        const ts = new Date().toISOString().replace(/[:.]/g, "-");
+        const resultPath = `${screenshotDir}/result-${ts}.png`;
+        annotateComposite.grabToImage(result => {
+            if (!result.saveToFile(resultPath)) {
+                console.warn("[Region Selector] failed to save annotated grab");
+                root.dismiss();
+                return;
+            }
+            GlobalStates.snipCopyInFlight = true;
+            copySnipProcess.resultPath = resultPath;
+            copySnipProcess.command = ["bash", "-c",
+                `wl-copy --type image/png < '${StringUtils.shellSingleQuoteEscape(resultPath)}' && notify-send 'Screenshot' 'Annotated snip copied' -a 'Quickshell'`];
+            copySnipProcess.running = true;
+            root.visible = false;
+        }, Qt.size(Math.round(root.regionWidth * root.monitorScale),
+                   Math.round(root.regionHeight * root.monitorScale)));
     }
 
     // Execution after selection
     function snip() {
+        if (root.isRecording && ScreenRecord.recording) {
+            ScreenRecord.stopRecord();
+            root.dismiss();
+            return;
+        }
+
         // Validity check
         if (root.regionWidth <= 0 || root.regionHeight <= 0) {
             console.warn("[Region Selector] Invalid region size, skipping snip.");
             root.dismiss();
         }
 
-        // Clamp region to screen bounds
-        root.regionX = Math.max(0, Math.min(root.regionX, root.screen.width - root.regionWidth));
-        root.regionY = Math.max(0, Math.min(root.regionY, root.screen.height - root.regionHeight));
-        root.regionWidth = Math.max(0, Math.min(root.regionWidth, root.screen.width - root.regionX));
-        root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
+        root.clampRegion();
 
         // Adjust action
         if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
@@ -288,20 +327,46 @@ PanelWindow {
         const screenshotDir = Config.options.screenSnip.savePath !== "" ? //
             Config.options.screenSnip.savePath : "";
         var screenshotAction = root.getScreenshotAction();
+        const isCopy = screenshotAction === ScreenshotAction.Action.Copy;
+        let resultPath = "";
+        if (isCopy) {
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            const dir = screenshotDir !== "" ? screenshotDir : root.screenshotDir;
+            resultPath = `${dir}/result-${ts}.png`;
+        }
         const command = ScreenshotAction.getCommand(
             root.regionX * root.monitorScale, //
             root.regionY * root.monitorScale, //
-            root.regionWidth * root.monitorScale,// 
+            root.regionWidth * root.monitorScale,//
             root.regionHeight * root.monitorScale, //
             root.screenshotPath, //
             screenshotAction, //
-            screenshotDir
+            screenshotDir, //
+            resultPath
         )
-        Quickshell.execDetached(command);
-        if (root.action == RegionSelection.SnipAction.Record || root.action == RegionSelection.SnipAction.RecordWithSound) {
-            root.phase = RegionSelection.Phase.Post
-            root.selectionMode = RegionSelection.SelectionMode.RectCorners
+        if (isCopy) {
+            // Copy runs through a Process so completion is observable and the
+            // result file can be announced. Dismissing now would destroy this
+            // window (and kill the process with it), so hide the overlay
+            // immediately and dismiss once the process exits.
+            GlobalStates.snipCopyInFlight = true;
+            copySnipProcess.resultPath = resultPath;
+            copySnipProcess.command = command;
+            copySnipProcess.running = true;
+            root.visible = false;
         } else {
+            Quickshell.execDetached(command);
+            root.dismiss();
+        }
+    }
+
+    Process {
+        id: copySnipProcess
+        property string resultPath: ""
+        onExited: (exitCode, exitStatus) => {
+            GlobalStates.snipCopyInFlight = false;
+            if (exitCode === 0 && copySnipProcess.resultPath !== "")
+                ScreenshotEvents.emitIfValid(copySnipProcess.resultPath);
             root.dismiss();
         }
     }
@@ -310,20 +375,40 @@ PanelWindow {
     mask: Region {
         item: switch(root.phase) {
             case RegionSelection.Phase.Select: return mouseArea;
+            case RegionSelection.Phase.Annotate: return screenshotImage;
             case RegionSelection.Phase.Post: return null;
         }
     }
 
-    ScreencopyView { // For freezing
+    Image {
+        id: screenshotImage
         anchors.fill: parent
-        live: false
-        captureSource: root.screen
-        visible: root.phase === RegionSelection.Phase.Select
+        source: root.screenshotSource
+        cache: false
+        asynchronous: false
+        fillMode: Image.Stretch
+        visible: root.phase !== RegionSelection.Phase.Post
+
+        onStatusChanged: {
+            if (status === Image.Ready) {
+                root.screenshotReady = true;
+                if (root.enableContentRegions) imageDetectionProcess.running = true;
+                root.finishPreparationIfReady();
+            } else if (status === Image.Error) {
+                console.warn(`[Region Selector] failed to decode fresh capture: ${source}`);
+                Quickshell.execDetached(["notify-send", "Screenshot failed", "Could not load the fresh frame. Please try again.", "-a", "Quickshell"]);
+                root.dismiss();
+            }
+        }
 
         focus: root.visible
-        Keys.onPressed: (event) => { // Esc to close
-            if (event.key === Qt.Key_Escape) {
+        Keys.onPressed: (event) => {
+            if (event.key === Qt.Key_Escape) { // Esc to close
+                if (GlobalStates.snipCopyInFlight) return; // dismissing would kill the copy pipeline
                 Qt.callLater(root.dismiss);
+            } else if (root.phase === RegionSelection.Phase.Annotate
+                    && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                root.finishAnnotated();
             }
         }
     }
@@ -331,6 +416,7 @@ PanelWindow {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
+        enabled: root.phase === RegionSelection.Phase.Select
         cursorShape: Qt.CrossCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true
@@ -364,7 +450,17 @@ PanelWindow {
                 root.regionWidth = maxX - minX + padding * 2;
                 root.regionHeight = maxY - minY + padding * 2;
             }
-            root.snip();
+            // Left-button Copy snips (rect mode) pause for annotation; the
+            // circle mask and every other action keep the instant pipeline.
+            if (root.action === RegionSelection.SnipAction.Copy
+                    && root.mouseButton === Qt.LeftButton
+                    && root.selectionMode === RegionSelection.SelectionMode.RectCorners
+                    && root.regionWidth > 4 && root.regionHeight > 4) {
+                root.clampRegion();
+                root.phase = RegionSelection.Phase.Annotate;
+            } else {
+                root.snip();
+            }
         }
         onPositionChanged: (mouse) => {
             root.updateTargetedRegion(mouse.x, mouse.y);
@@ -406,8 +502,9 @@ PanelWindow {
 
         // The thing to the bottom-right with an icon
         CursorGuide {
+            id: cursorGuide
             z: 9999
-            visible: root.phase === RegionSelection.Phase.Select
+            shown: root.phase === RegionSelection.Phase.Select && !mouseArea.pointerOverChrome
             x: root.dragging ? root.regionX + root.regionWidth : mouseArea.mouseX
             y: root.dragging ? root.regionY + root.regionHeight : mouseArea.mouseY
             action: root.action
@@ -501,6 +598,66 @@ PanelWindow {
             }
         }
 
+        // Annotation phase: cropped backdrop + canvas (this exact group is
+        // grabbed for the composite) and the Snagit-style tool bar under it.
+        Item {
+            id: annotateComposite
+            z: 5
+            visible: root.phase === RegionSelection.Phase.Annotate
+            x: root.regionX
+            y: root.regionY
+            width: root.regionWidth
+            height: root.regionHeight
+            clip: true
+
+            Image {
+                x: -root.regionX
+                y: -root.regionY
+                width: root.width
+                height: root.height
+                source: root.screenshotSource
+                cache: false
+                fillMode: Image.Stretch
+            }
+
+            Loader {
+                id: annotationLoader
+                anchors.fill: parent
+                active: root.phase === RegionSelection.Phase.Annotate
+                sourceComponent: AnnotationLayer {}
+            }
+        }
+
+        Loader {
+            z: 10
+            active: root.phase === RegionSelection.Phase.Annotate && annotationLoader.item !== null
+            sourceComponent: AnnotationToolbar {
+                annotationLayer: annotationLoader.item
+                onConfirmed: root.finishAnnotated()
+                onCancelled: if (!GlobalStates.snipCopyInFlight) root.dismiss()
+                x: {
+                    const preferred = root.regionX + root.regionWidth / 2 - implicitWidth / 2;
+                    return Math.max(8, Math.min(preferred, root.width - implicitWidth - 8));
+                }
+                y: {
+                    const below = root.regionY + root.regionHeight + 12;
+                    if (below + implicitHeight + 8 <= root.height) return below;
+                    const above = root.regionY - implicitHeight - 12;
+                    if (above >= 8) return above;
+                    return root.regionY + root.regionHeight - implicitHeight - 12; // inside, bottom
+                }
+            }
+        }
+
+        // While the pointer is on the chrome, the real cursor is what the user
+        // is aiming with - so the crosshair's own markers get out of the way
+        // rather than sitting on top of the buttons being pressed.
+        property bool pointerOverChrome: regionSelectionControls.visible
+            && mouseArea.mouseX >= regionSelectionControls.x
+            && mouseArea.mouseX <= regionSelectionControls.x + regionSelectionControls.width
+            && mouseArea.mouseY >= regionSelectionControls.y
+            && mouseArea.mouseY <= regionSelectionControls.y + regionSelectionControls.height
+
         // Controls
         Row {
             id: regionSelectionControls
@@ -526,7 +683,7 @@ PanelWindow {
             Behavior on anchors.bottomMargin {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
-            spacing: 6
+            spacing: Appearance.spacing.space100
 
             OptionsToolbar {
                 Synchronizer on action {
@@ -535,12 +692,14 @@ PanelWindow {
                 Synchronizer on selectionMode {
                     property alias source: root.selectionMode
                 }
-                onDismiss: root.dismiss();
+                windowTargeting: root.enableWindowRegions
+                onDismiss: if (!GlobalStates.snipCopyInFlight) root.dismiss();
+                onCaptureFullScreen: if (!GlobalStates.snipCopyInFlight) root.snipFullScreen();
             }
             ToolbarPairedFab {
                 anchors.verticalCenter: parent.verticalCenter
                 iconText: "close"
-                onClicked: root.dismiss();
+                onClicked: if (!GlobalStates.snipCopyInFlight) root.dismiss();
                 StyledToolTip {
                     text: Translation.tr("Close")
                 }

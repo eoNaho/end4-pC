@@ -20,6 +20,7 @@ import qs.modules.ii.sidebarRight.nightLight
 import qs.modules.ii.sidebarRight.volumeMixer
 import qs.modules.ii.sidebarRight.wifiNetworks
 import qs.modules.ii.sidebarRight.iconPicker
+import qs.modules.ii.sidebarRight.calendar
 
 Item {
     id: root
@@ -30,6 +31,8 @@ Item {
     property bool showBluetoothDialog: false
     property bool showNightLightDialog: false
     property bool showWifiDialog: false
+    property bool showCalendarDateDialog: false
+    property var selectedCalendarDate: new Date()
     property bool editMode: false
     property bool showIconPickerDialog: false
 
@@ -57,6 +60,7 @@ Item {
                 root.showBluetoothDialog = false;
                 root.showAudioOutputDialog = false;
                 root.showAudioInputDialog = false;
+                root.showCalendarDateDialog = false;
             }
         }
     }
@@ -338,7 +342,18 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillHeight: false
                 Layout.fillWidth: true
+                onDateSelected: (date) => {
+                    root.selectedCalendarDate = date;
+                    root.showCalendarDateDialog = true;
+                }
             }
+        }
+    }
+
+    ToggleDialog {
+        shownPropertyString: "showCalendarDateDialog"
+        dialog: CalendarDateDialog {
+            selectedDate: root.selectedCalendarDate
         }
     }
 
