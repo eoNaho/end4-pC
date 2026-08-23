@@ -55,6 +55,11 @@ ContentPage {
         { id: "hyprlandXkbIndicator",   name: Translation.tr("Keyboard Layout"), icon: "keyboard" },
         { id: "divisor",            name: Translation.tr("Divider"),             icon: "horizontal_distribute" },
         { id: "launcherButton",     name: Translation.tr("Launcher Button"),     icon: "search" },
+        { id: "idleInhibitor",      name: Translation.tr("Caffeine (Idle Inhibitor)"), icon: "local_cafe" },
+        { id: "lockKeysIndicator",  name: Translation.tr("Lock Keys (Caps/Num)"), icon: "keyboard_capslock" },
+        { id: "pomodoroBarButton",  name: Translation.tr("Pomodoro & Timer"),    icon: "timer" },
+        { id: "audioSinkSelector",  name: Translation.tr("Audio Sink Switcher"), icon: "speaker" },
+        { id: "privacyIndicator",   name: Translation.tr("Privacy Indicator"),   icon: "security" },
     ]
 
     function availableFor() {

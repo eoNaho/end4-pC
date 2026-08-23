@@ -819,5 +819,22 @@
     "Power": "Energia",
     "Reload": "Recarregar",
     "Default": "Padrão",
-    "Custom": "Personalizado"
+    "Custom": "Personalizado",
+    "Caffeine (Idle Inhibitor)": "Cafeína (Inibidor de Suspensão)",
+    "Caffeine active (Sleep inhibited)": "Cafeína ativa (Suspensão inibida)",
+    "Caffeine (Inhibit sleep)": "Cafeína (Inibir suspensão)",
+    "Lock Keys (Caps/Num)": "Teclas de Trava (Caps/Num)",
+    "Caps Lock is ON": "Caps Lock está LIGADO",
+    "Num Lock is ON": "Num Lock está LIGADO",
+    "Pomodoro & Timer": "Pomodoro & Timer",
+    "Pomodoro Timer (Left-click to start)": "Timer Pomodoro (Clique para iniciar)",
+    "Pomodoro: Focus (%1) - Left-click to pause, Right-click to reset": "Pomodoro: Foco (%1) - Clique esquerdo para pausar, direito para redefinir",
+    "Pomodoro: Break (%1) - Left-click to pause, Right-click to reset": "Pomodoro: Descanso (%1) - Clique esquerdo para pausar, direito para redefinir",
+    "Audio Sink Switcher": "Seletor de Saída de Áudio",
+    "Audio Output": "Saída de Áudio",
+    "Audio Output: %1 (%2%) - Scroll to adjust, Click for device list": "Saída de Áudio: %1 (%2%) - Role para ajustar, clique para listar dispositivos",
+    "Privacy Indicator": "Indicador de Privacidade",
+    "Microphone is currently in use": "O microfone está sendo usado no momento",
+    "Webcam is currently in use": "A webcam está sendo usada no momento",
+    "Media Player on Bar": "Reprodutor de Mídia na Barra"
 }
