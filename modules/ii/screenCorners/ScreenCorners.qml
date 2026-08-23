@@ -148,12 +148,12 @@ Scope {
             property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
 
             // Hide when fullscreen
-            property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && workspace.monitor.name == monitor.name)
+            property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && monitor && workspace.monitor.name == monitor.name)
             property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(workspace => ((workspace.toplevels.values.filter(window => window.wayland?.fullscreen)[0] != undefined) && workspace.active))[0]
             property bool fullscreen: activeWorkspaceWithFullscreen != undefined
             // A special workspace open on top of the fullscreen window should bring corners back,
             // same reasoning as the bar's layer fix: fullscreen only buries them when nothing else is above it.
-            property var thisMonitorData: HyprlandData.monitors.find(m => m.name === monitor.name)
+            property var thisMonitorData: HyprlandData.monitors.find(m => m.name === monitor?.name)
             property bool specialOpen: (thisMonitorData?.specialWorkspace?.name ?? "") !== ""
 
             CornerPanelWindow {

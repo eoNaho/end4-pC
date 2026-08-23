@@ -67,12 +67,13 @@ Scope {
     Variants {
         model: Quickshell.screens
 
-        Item {
+        Scope {
             id: frameGroup
             required property var modelData
 
             PanelWindow { // top
                 screen: frameGroup.modelData
+                visible: Config.options.bar.showFrame
                 exclusionMode: ExclusionMode.Normal
                 exclusiveZone: root.frameVisibleFor("top") ? root.frameThickness : 0
                 WlrLayershell.namespace: "quickshell:screenframe"
@@ -88,6 +89,7 @@ Scope {
 
             PanelWindow { // bottom
                 screen: frameGroup.modelData
+                visible: Config.options.bar.showFrame
                 exclusionMode: ExclusionMode.Normal
                 exclusiveZone: root.frameVisibleFor("bottom") ? root.frameThickness : 0
                 WlrLayershell.namespace: "quickshell:screenframe"
@@ -103,6 +105,7 @@ Scope {
 
             PanelWindow { // left
                 screen: frameGroup.modelData
+                visible: Config.options.bar.showFrame
                 exclusionMode: ExclusionMode.Normal
                 exclusiveZone: root.frameVisibleFor("left") ? root.frameThickness : 0
                 WlrLayershell.namespace: "quickshell:screenframe"
@@ -118,6 +121,7 @@ Scope {
 
             PanelWindow { // right
                 screen: frameGroup.modelData
+                visible: Config.options.bar.showFrame
                 exclusionMode: ExclusionMode.Normal
                 exclusiveZone: root.frameVisibleFor("right") ? root.frameThickness : 0
                 WlrLayershell.namespace: "quickshell:screenframe"

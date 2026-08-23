@@ -60,10 +60,9 @@ Scope { // Scope
     }
 
     Component.onCompleted: {
-        root.sidebarContent = contentComponent.createObject(null, {
+        root.sidebarContent = contentComponent.createObject(sidebarLoader.item.contentParent, {
             "scopeRoot": root,
         });
-        sidebarLoader.item.contentParent.children = [root.sidebarContent];
     }
 
     onDetachChanged: {
@@ -72,12 +71,12 @@ Scope { // Scope
             sidebarContent.parent = null; // Detach content from sidebar
             sidebarLoader.active = false; // Unload sidebar
             detachedSidebarLoader.active = true; // Load detached window
-            detachedSidebarLoader.item.contentParent.children = [sidebarContent];
+            sidebarContent.parent = detachedSidebarLoader.item.contentParent;
         } else {
             sidebarContent.parent = null; // Detach content from window
             detachedSidebarLoader.active = false; // Unload detached window
             sidebarLoader.active = true; // Load sidebar
-            sidebarLoader.item.contentParent.children = [sidebarContent];
+            sidebarContent.parent = sidebarLoader.item.contentParent;
         }
     }
 
