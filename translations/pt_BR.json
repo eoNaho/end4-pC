@@ -836,5 +836,8 @@
     "Privacy Indicator": "Indicador de Privacidade",
     "Microphone is currently in use": "O microfone está sendo usado no momento",
     "Webcam is currently in use": "A webcam está sendo usada no momento",
-    "Media Player on Bar": "Reprodutor de Mídia na Barra"
+    "Media Player on Bar": "Reprodutor de Mídia na Barra",
+    "No applications playing audio": "Nenhum aplicativo reproduzindo áudio",
+    "Applications": "Aplicativos",
+    "Open Volume Mixer": "Abrir Mixer de Volume"
 }

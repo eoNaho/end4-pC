@@ -2,8 +2,10 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarRight.volumeMixer
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Services.Pipewire
 
@@ -49,165 +51,175 @@ PopupWindow {
     Rectangle {
         id: popupBackground
         anchors.centerIn: parent
-        implicitWidth: 280
-        implicitHeight: contentCol.implicitHeight + 16
+        implicitWidth: 320
+        implicitHeight: Math.min(540, contentCol.implicitHeight + 20)
         color: Appearance.colors.colLayer0
         radius: Appearance.rounding.windowRounding
         border.width: 1
         border.color: Appearance.colors.colLayer0Border
 
-        ColumnLayout {
-            id: contentCol
-            anchors {
-                fill: parent
-                margins: 10
-            }
-            spacing: 8
+        Flickable {
+            id: flickable
+            anchors.fill: parent
+            anchors.margins: 10
+            contentHeight: contentCol.implicitHeight
+            clip: true
 
-            // ─── Header com título e volume atual ───
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
+            ColumnLayout {
+                id: contentCol
+                width: flickable.width
                 spacing: 8
 
-                MaterialSymbol {
-                    text: Audio.sink?.audio?.muted ? "volume_off" : "headphones"
-                    iconSize: Appearance.font.pixelSize.normal + 2
-                    color: Appearance.colors.colPrimary
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Audio Output")
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer0
-                }
-
-                StyledText {
-                    text: `${Math.round((Audio.sink?.audio?.volume ?? 0) * 100)}%`
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colPrimary
-                }
-            }
-
-            // ─── Slider de Volume ───
-            StyledSlider {
-                Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                value: Audio.sink?.audio?.volume ?? 0
-                onMoved: {
-                    if (Audio.sink?.audio) {
-                        Audio.sink.audio.volume = value;
-                    }
-                }
-                configuration: StyledSlider.Configuration.S
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: Appearance.colors.colLayer0Border
-            }
-
-            // ─── Lista de Dispositivos ───
-            Repeater {
-                model: Audio.outputDevices
-                delegate: Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: 38
-                    radius: Appearance.rounding.small
-                    readonly property bool isCurrent: modelData.id === Pipewire.defaultAudioSink?.id
-                    color: isCurrent
-                        ? Appearance.colors.colPrimaryContainer
-                        : (devMouse.containsMouse ? Appearance.colors.colLayer1 : "transparent")
-
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 8
-
-                        MaterialSymbol {
-                            text: isCurrent ? "check_circle" : "radio_button_unchecked"
-                            iconSize: Appearance.font.pixelSize.normal
-                            fill: isCurrent ? 1 : 0
-                            color: isCurrent ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            elide: Text.ElideRight
-                            text: Audio.friendlyDeviceName(modelData)
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: isCurrent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer0
-                        }
-                    }
-
-                    MouseArea {
-                        id: devMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Audio.setDefaultSink(modelData);
-                            root.close();
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: Appearance.colors.colLayer0Border
-            }
-
-            // ─── Botão para abrir o pavucontrol / mixer do sistema ───
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 34
-                radius: Appearance.rounding.small
-                color: mixerMouse.containsMouse ? Appearance.colors.colLayer1 : "transparent"
-
+                // ─── Header com título e volume atual ───
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 4
                     spacing: 8
 
                     MaterialSymbol {
-                        text: "tune"
-                        iconSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colSubtext
+                        text: Audio.sink?.audio?.muted ? "volume_off" : "headphones"
+                        iconSize: Appearance.font.pixelSize.normal + 2
+                        color: Appearance.colors.colPrimary
                     }
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Open Volume Mixer")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colSubtext
+                        text: Translation.tr("Audio Output")
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnLayer0
+                    }
+
+                    StyledText {
+                        text: `${Math.round((Audio.sink?.audio?.volume ?? 0) * 100)}%`
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colPrimary
                     }
                 }
 
-                MouseArea {
-                    id: mixerMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.close();
-                        const mixerApp = Config.options.apps.volumeMixer || "pavucontrol";
-                        Quickshell.execDetached(["bash", "-c", mixerApp]);
+                // ─── Slider de Volume Geral ───
+                StyledSlider {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 4
+                    value: Audio.sink?.audio?.volume ?? 0
+                    onMoved: {
+                        if (Audio.sink?.audio) {
+                            Audio.sink.audio.volume = value;
+                        }
                     }
+                    configuration: StyledSlider.Configuration.S
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Appearance.colors.colLayer0Border
+                }
+
+                // ─── Lista de Dispositivos de Saída ───
+                Repeater {
+                    model: Audio.outputDevices
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        radius: Appearance.rounding.small
+                        readonly property bool isCurrent: modelData.id === Pipewire.defaultAudioSink?.id
+                        color: isCurrent
+                            ? Appearance.colors.colPrimaryContainer
+                            : (devMouse.containsMouse ? Appearance.colors.colLayer1 : "transparent")
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            MaterialSymbol {
+                                text: isCurrent ? "check_circle" : "radio_button_unchecked"
+                                iconSize: Appearance.font.pixelSize.normal
+                                fill: isCurrent ? 1 : 0
+                                color: isCurrent ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                text: Audio.friendlyDeviceName(modelData)
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: isCurrent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer0
+                            }
+                        }
+
+                        MouseArea {
+                            id: devMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                Audio.setDefaultSink(modelData);
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Appearance.colors.colLayer0Border
+                }
+
+                // ─── Seção Mixer por Aplicativo ───
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 4
+                    Layout.topMargin: 2
+                    spacing: 8
+
+                    MaterialSymbol {
+                        text: "apps"
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Applications")
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer0
+                    }
+                }
+
+                Repeater {
+                    model: Audio.outputAppNodes
+                    delegate: VolumeMixerEntry {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        Layout.rightMargin: 4
+                        required property var modelData
+                        node: modelData
+                    }
+                }
+
+                StyledText {
+                    visible: !Audio.outputAppNodes || Audio.outputAppNodes.length === 0
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Translation.tr("No applications playing audio")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
                 }
             }
         }
