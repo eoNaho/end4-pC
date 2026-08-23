@@ -57,8 +57,10 @@ Item {
         id: coverArtDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => { root.downloaded = true }
+        command: ["bash", "-c", `[ -s "${artFilePath}" ] || (curl --fail -sSL "${targetFile}" -o "${artFilePath}" 2>/dev/null || (rm -f "${artFilePath}" && exit 1)) && [ -s "${artFilePath}" ]`]
+        onExited: (exitCode, exitStatus) => {
+            root.downloaded = (exitCode === 0)
+        }
     }
 
     ColorQuantizer {

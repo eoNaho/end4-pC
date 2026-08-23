@@ -79,7 +79,7 @@ ContentPage {
                     anchors.centerIn: parent
                     implicitWidth: 72
                     implicitHeight: 72
-                    source: Quickshell.iconPath(SystemInfo.logo)
+                    source: Quickshell.iconPath(SystemInfo.logo) || Quickshell.shellPath("assets/icons/" + SystemInfo.logo + ".svg")
                 }
             }
 
@@ -133,24 +133,25 @@ ContentPage {
                     }
                 }
             }
-            RowLayout {
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                anchors.margins: 0
-                spacing: 8
-                RippleButton {
-                    buttonText: Translation.tr("Update Dots")
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colPrimaryContainer
-                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                    Layout.preferredHeight: 44
-                    downAction: () => runUpdateDots()
-                    contentItem: StyledText {
-                        text: parent.buttonText
-                        horizontalAlignment: Text.AlignHCenter
-                        leftPadding: 10
-                        rightPadding: 10
-                    }
+        }
+
+        RowLayout {
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.margins: 24
+            spacing: 8
+            RippleButton {
+                buttonText: Translation.tr("Update Dots")
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                Layout.preferredHeight: 44
+                downAction: () => runUpdateDots()
+                contentItem: StyledText {
+                    text: parent.buttonText
+                    horizontalAlignment: Text.AlignHCenter
+                    leftPadding: 10
+                    rightPadding: 10
                 }
             }
         }

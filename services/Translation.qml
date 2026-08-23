@@ -44,6 +44,7 @@ Singleton {
         translationsDir: root.generatedTranslationsDir
         onLanguagesScanned: (languages) => {
             root.availableGeneratedLanguages = [...languages];
+            generatedTranslationFileView.reread();
         }
     }
 
@@ -69,6 +70,7 @@ Singleton {
         id: generatedTranslationFileView
         translationsDir: root.generatedTranslationsDir
         languageCode: root.languageCode
+        availableLanguages: root.availableGeneratedLanguages
         onContentLoaded: (data) => {
             root.generatedTranslations = data;
             root.isLoading = false;
@@ -119,10 +121,15 @@ Singleton {
         id: translationReader
         required property string translationsDir
         property string languageCode: root.languageCode
+        property var availableLanguages: null
         signal contentLoaded(var data)
 
         function reread() { // Proper reload in case the file was incorrect before
             translationReader.path = "";
+            if (translationReader.availableLanguages !== null && !translationReader.availableLanguages.includes(translationReader.languageCode)) {
+                translationReader.contentLoaded({});
+                return;
+            }
             translationReader.path = `${translationReader.translationsDir}/${translationReader.languageCode}.json`;
             translationReader.reload();
         }

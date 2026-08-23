@@ -68,5 +68,8 @@ Singleton {
                 root.calendarEvents = [];
             }
         }
+        onLoadFailed: error => {
+            root.calendarEvents = [];
+        }
     }
 }

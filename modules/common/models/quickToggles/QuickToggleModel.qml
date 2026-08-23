@@ -18,5 +18,5 @@ QtObject {
     property var altAction: null
 
     // Allow stuff like Processes to be declared freely
-    default property list<QtObject> data
+    default property list<QtObject> items
 }

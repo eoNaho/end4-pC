@@ -76,7 +76,10 @@ DockButton {
 
     altAction: () => {
         if (Config.options.dock?.showContextMenu ?? true) {
-            contextMenu.active = true;
+            contextMenuLoader.active = true;
+            if (contextMenuLoader.item) {
+                contextMenuLoader.item.active = true;
+            }
         }
     }
 
@@ -177,9 +180,16 @@ DockButton {
         id: launchAnims
     }
 
-    DockAppContextMenu {
-        id: contextMenu
-        hoverTarget: root
-        appToplevel: root.appToplevel
+    Loader {
+        id: contextMenuLoader
+        active: false
+        sourceComponent: DockAppContextMenu {
+            hoverTarget: root
+            appToplevel: root.appToplevel
+            active: true
+            onCloseRequested: {
+                contextMenuLoader.active = false;
+            }
+        }
     }
 }

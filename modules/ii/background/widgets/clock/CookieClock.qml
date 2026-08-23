@@ -74,6 +74,9 @@ Item {
         onLoaded: {
             root.setClockPreset(categoryFileView.text().trim())
         }
+        onLoadFailed: error => {
+            root.setClockPreset("minimalist")
+        }
     }
 
     property bool useSineCookie: Config.options.background.widgets.clock.cookie.useSineCookie

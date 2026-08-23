@@ -35,7 +35,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         Config.readWriteDelay = 0;
-        Config.blockWrites = true;
+        Config.blockWrites = false;
         MaterialThemeLoader.reapplyTheme();
     }
 

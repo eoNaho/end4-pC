@@ -87,17 +87,26 @@ Singleton {
         return str.split('.').slice(-1)[0]
     }
 
-    function getKebabNormalizedAppName(str) {
-        return str.toLowerCase().replace(/\s+/g, "-");
-    }
-
     function getUndescoreToKebabAppName(str) {
         return str.toLowerCase().replace(/_/g, "-");
     }
 
+    property var _iconCache: ({})
+
+    onListChanged: {
+        _iconCache = ({})
+    }
+
     function guessIcon(str) {
         if (!str || str.length == 0) return "image-missing";
+        if (root._iconCache[str]) return root._iconCache[str];
 
+        const result = root._computeGuessIcon(str);
+        root._iconCache[str] = result;
+        return result;
+    }
+
+    function _computeGuessIcon(str) {
         // Quickshell's desktop entry lookup
         const entry = DesktopEntries.byId(str);
         if (entry) return entry.icon;
@@ -118,7 +127,6 @@ Singleton {
 
         // Icon exists -> return as is
         if (iconExists(str)) return str;
-
 
         // Simple guesses
         const lowercased = str.toLowerCase();
