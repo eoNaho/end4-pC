@@ -154,7 +154,11 @@ Singleton {
                 property string avatarPicture: ""
                 property string descriptionText: "::distro::"
                 property string displayName: ""
-
+                property string bio: ""
+                property string customStatus: ""
+                property bool showUptime: true
+                property bool showWeatherQuip: true
+                property bool showSysStats: true
             }
 
             property JsonObject hyprland: JsonObject {
@@ -306,7 +310,15 @@ Singleton {
                         property string placementStrategy: "free"
                         property real x: 400
                         property real y: 100
-                        property string sizeMode: "2x2" 
+                        property string sizeMode: "2x2"
+                        property string style: "glass" // "glass", "flat", "banner"
+                        property real blurRadius: 18
+                        property real backgroundOpacity: 0.50
+                        property string customBackground: ""
+                        property bool showActions: true
+                        property bool showStats: true
+                        property bool showUptime: true
+                        property bool showQuip: true
                     }
 
                     property JsonObject images: JsonObject {

@@ -204,6 +204,23 @@ ContentPage {
                     }
 
                     ConfigTextArea {
+                        id: bioField
+                        buttonIcon: "edit_note"
+                        placeholderText: Translation.tr("Tell something about yourself...")
+                        text: Translation.tr("Bio / Status Message")
+                        value: Config.options.profile.bio
+                        Timer {
+                            id: bioDebounceTimer
+                            interval: 800
+                            running: false
+                            onTriggered: {
+                                Config.options.profile.bio = bioField.value
+                            }
+                        }
+                        onValueChanged: bioDebounceTimer.restart()
+                    }
+
+                    ConfigTextArea {
                         id: hostnameField
                         Layout.fillWidth: true
                         buttonIcon: "dns"
@@ -232,6 +249,82 @@ ContentPage {
                             { displayName: Translation.tr("Distro"), icon: "deployed_code", value: "distro" },
                             { displayName: Translation.tr("Uptime"), icon: "timelapse",     value: "uptime" },
                         ]
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("User Card & Background")
+
+                GroupedList {
+                    ConfigSelectionArray {
+                        text: Translation.tr("Card Style")
+                        icon: "palette"
+                        currentValue: Config.options.background.widgets.userCard.style ?? "glass"
+                        onSelected: newValue => {
+                            Config.options.background.widgets.userCard.style = newValue;
+                        }
+                        options: [
+                            { displayName: Translation.tr("Frosted Glass"), icon: "blur_on",     value: "glass" },
+                            { displayName: Translation.tr("Material Flat"), icon: "crop_square", value: "flat" }
+                        ]
+                    }
+
+                    ConfigSelectionArray {
+                        text: Translation.tr("Card Size")
+                        icon: "aspect_ratio"
+                        currentValue: Config.options.background.widgets.userCard.sizeMode ?? "2x2"
+                        onSelected: newValue => {
+                            Config.options.background.widgets.userCard.sizeMode = newValue;
+                        }
+                        options: [
+                            { displayName: "1x1", icon: "circle",         value: "1x1" },
+                            { displayName: "1x2", icon: "dock_to_bottom", value: "1x2" },
+                            { displayName: "2x2", icon: "dashboard",      value: "2x2" },
+                            { displayName: "2x3", icon: "view_agenda",    value: "2x3" }
+                        ]
+                    }
+
+                    ConfigTextArea {
+                        id: cardBgField
+                        buttonIcon: "wallpaper"
+                        placeholderText: Translation.tr("Leave empty to use current wallpaper")
+                        text: Translation.tr("Card Background Image")
+                        value: Config.options.background.widgets.userCard.customBackground ?? ""
+                        Timer {
+                            id: cardBgDebounceTimer
+                            interval: 800
+                            running: false
+                            onTriggered: {
+                                Config.options.background.widgets.userCard.customBackground = cardBgField.value
+                            }
+                        }
+                        onValueChanged: cardBgDebounceTimer.restart()
+                    }
+
+                    ConfigSlider {
+                        text: Translation.tr("Blur")
+                        textWidth: 140
+                        buttonIcon: "blur_on"
+                        value: Config.options.background.widgets.userCard.blurRadius ?? 18
+                        from: 0
+                        to: 50
+                        onValueChanged: {
+                            Config.options.background.widgets.userCard.blurRadius = value;
+                        }
+                    }
+
+                    ConfigSlider {
+                        text: Translation.tr("Opacity")
+                        textWidth: 140
+                        buttonIcon: "opacity"
+                        value: Math.round((Config.options.background.widgets.userCard.backgroundOpacity ?? 0.50) * 100)
+                        from: 10
+                        to: 95
+                        usePercentTooltip: true
+                        onValueChanged: {
+                            Config.options.background.widgets.userCard.backgroundOpacity = value / 100;
+                        }
                     }
                 }
             }

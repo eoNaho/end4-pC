@@ -22,6 +22,7 @@ AbstractWidget {
     property real targetY : Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height))
     x: targetX
     y: targetY
+    z: (draggable && (containsPress || hoverActive)) ? 10 : 0
     visible: opacity > 0
     opacity: (GlobalStates.screenLocked && !visibleWhenLocked) ? 0 : 1
     Behavior on opacity {

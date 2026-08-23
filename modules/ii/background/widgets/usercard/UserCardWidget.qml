@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell.Io
 import Quickshell
+import Quickshell.Wayland
 import qs
 import qs.services
 import qs.modules.common
@@ -18,17 +19,21 @@ AbstractBackgroundWidget {
     readonly property real snapWidth1: 132
     readonly property real snapWidth2: 276
     readonly property real snapWidth3: 276
+    readonly property real snapWidth4: 420
 
     readonly property real snapHeight1: 120
     readonly property real snapHeight2: 120
     readonly property real snapHeight3: 252
+    readonly property real snapHeight4: 252
 
     property string sizeMode: root.configEntry.sizeMode ?? "2x2"
+    property string cardStyle: root.configEntry.style ?? "glass"
 
     property real widgetWidth: {
         switch (root.sizeMode) {
             case "1x1": return snapWidth1
             case "1x2": return snapWidth2
+            case "2x3": return snapWidth4
             default:    return snapWidth3
         }
     }
@@ -36,56 +41,51 @@ AbstractBackgroundWidget {
         switch (root.sizeMode) {
             case "1x1": return snapHeight1
             case "1x2": return snapHeight2
+            case "2x3": return snapHeight4
             default:    return snapHeight3
         }
     }
 
-    readonly property real heightToggleFraction: 0.3
-    readonly property real heightToggleDelta: (root.snapHeight3 - root.snapHeight2) * root.heightToggleFraction
-
-    function modeForDrag(dx, dy, startWidth) {
-        var mid = (root.snapWidth1 + root.snapWidth2) / 2
-        var newWidth = startWidth + dx
-
-        if (newWidth < mid) return "1x1"
-
-        if (root.sizeMode === "1x1") {
-            return dy > root.heightToggleDelta ? "2x2" : "1x2"
+    readonly property string avatarSource: {
+        if (Config.options.profile.avatarPicture && Config.options.profile.avatarPicture !== "") {
+            let p = Config.options.profile.avatarPicture;
+            return p.startsWith("/") ? ("file://" + p) : p;
         }
-        if (dy > root.heightToggleDelta) return "2x2"
-        if (dy < -root.heightToggleDelta) return "1x2"
-        return root.sizeMode
+        if (Config.options.profile.avatarPath && Config.options.profile.avatarPath !== "") {
+            let p = Config.options.profile.avatarPath;
+            return p.startsWith("/") ? ("file://" + p) : p;
+        }
+        return "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face";
     }
 
     property int avatarSize: 64
-    property int blurMargin: 18
     property string hostname: SystemInfo.hostname
-    property string username: Config.options.profile.displayName === "" ? SystemInfo.username : Config.options.profile.displayName
-    property string userDisplay: username.length > 10 ? username : (username + "@" + hostname)
+    property string username: (Config.options.profile.displayName && Config.options.profile.displayName !== "") ? Config.options.profile.displayName : SystemInfo.username
+    property string userDisplay: username.length > 14 ? username : (username + "@" + hostname)
+    property string userBio: Config.options.profile.bio ?? ""
     property var currentQuip: weatherQuip()
 
     function weatherQuip() {
         const desc = (Weather.data?.description ?? "").toLowerCase();
-        const temp = Weather.data?.temp ?? "--";
         if (desc.includes("rain"))
-            return { text: `• raining, grab a coffee`, icon: "coffee" };
-        if (desc.includes("clear"))
-            return { text: `• good day to touch grass`, icon: "eco" };
+            return { text: Translation.tr("Raining, grab a coffee"), icon: "coffee" };
+        if (desc.includes("clear") || desc.includes("sun"))
+            return { text: Translation.tr("Good day to touch grass"), icon: "eco" };
         if (desc.includes("cloud"))
-            return { text: `• a bit cloudy today`, icon: "cloud" };
+            return { text: Translation.tr("A bit cloudy today"), icon: "cloud" };
         if (desc.includes("snow"))
-            return { text: `• snowing`, icon: "ac_unit" };
-        return { text: `• ${Weather.data?.description ?? ""}`, icon: "thermostat" };
+            return { text: Translation.tr("Snowing outside"), icon: "ac_unit" };
+        return { text: Weather.data?.description ?? Translation.tr("Have a productive day!"), icon: "auto_awesome" };
     }
 
     function greetingFor(hour) {
-        if (hour < 12) return "Good Morning"
-        if (hour < 18) return "Good Afternoon"
-        return "Good Evening"
+        if (hour < 12) return Translation.tr("Good Morning")
+        if (hour < 18) return Translation.tr("Good Afternoon")
+        return Translation.tr("Good Evening")
     }
 
     readonly property string greetingText: greetingFor(DateTime.hour24)
-    readonly property string todayString: "Today • " + DateTime.clock.date.toLocaleDateString(Qt.locale(), "dddd d MMM")
+    readonly property string todayString: DateTime.clock.date.toLocaleDateString(Qt.locale(), "dddd, d MMM")
 
     implicitWidth: root.widgetWidth
     implicitHeight: root.widgetHeight
@@ -97,106 +97,259 @@ AbstractBackgroundWidget {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
-    component AvatarImage: Image {
-        source: Config.options.profile.avatarPath !== ""
-            ? "file://" + Config.options.profile.avatarPicture
-            : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
-        sourceSize.width: width * 2
-        sourceSize.height: height * 2
-        fillMode: Image.PreserveAspectCrop
-        onStatusChanged: if (status === Image.Error) visible = false
+    // ─── Componente de Fundo Dinâmico (Frosted Glass vs Flat Material) ───
+    component CardBackground: Item {
+        id: cardBg
+        anchors.fill: parent
+        property real cardRadius: Appearance.rounding?.verylarge ?? 30
+        property color solidColor: Appearance.colors.colPrimaryContainer
+
+        StyledDropShadow { target: cardBg }
+
+        // Fundo Flat / Sólido
+        Rectangle {
+            anchors.fill: parent
+            radius: cardBg.cardRadius
+            color: cardBg.solidColor
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            visible: root.cardStyle === "flat" || root.cardStyle === "material"
+        }
+
+        // Fundo Frosted Glass (Vidro Fosco Real)
+        Item {
+            anchors.fill: parent
+            visible: root.cardStyle === "glass"
+
+            Item {
+                id: wallpaperSource
+                anchors.fill: parent
+                visible: false
+
+                Image {
+                    anchors.fill: parent
+                    source: {
+                        if (Config.options.background.widgets.userCard.customBackground && Config.options.background.widgets.userCard.customBackground !== "") {
+                            let p = Config.options.background.widgets.userCard.customBackground;
+                            return p.startsWith("/") ? ("file://" + p) : p;
+                        }
+                        return "file://" + (GlobalStates.screenLocked && Config.options.background.lockWall !== ""
+                            ? Config.options.background.lockWall
+                            : Config.options.background.wallpaperPath);
+                    }
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: false
+                }
+            }
+
+            FastBlur {
+                id: blurSurface
+                anchors.fill: parent
+                source: wallpaperSource
+                radius: Config.options.background.widgets.userCard.blurRadius ?? 18
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: blurSurface.width
+                        height: blurSurface.height
+                        radius: cardBg.cardRadius
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: cardBg.cardRadius
+                color: Appearance.colors.colPrimaryContainer
+                opacity: Config.options.background.widgets.userCard.backgroundOpacity ?? 0.50
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: cardBg.cardRadius
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.20)
+            }
+        }
+    }
+
+    // ─── Componente de Avatar 100% Recortado em Círculo com OpacityMask ───
+    component RoundAvatar: Item {
+        id: avatarComp
+        property real avatarRadius: width / 2
+        property real borderWidth: 0
+        property color borderColor: "transparent"
+        property color bgColor: Appearance.colors.colLayer0
+
+        implicitWidth: 64
+        implicitHeight: 64
+        Layout.preferredWidth: width
+        Layout.preferredHeight: height
+
+        Rectangle {
+            id: bgCircle
+            anchors.fill: parent
+            radius: avatarComp.avatarRadius
+            color: avatarComp.bgColor
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "account_circle"
+                iconSize: Math.min(parent.width * 0.75, 48)
+                color: Appearance.colors.colOnPrimaryContainer
+                visible: avatarImg.status !== Image.Ready
+            }
+        }
+
+        Item {
+            id: maskContainer
+            anchors.fill: parent
+            anchors.margins: avatarComp.borderWidth
+            visible: false
+
+            Rectangle {
+                anchors.fill: parent
+                radius: Math.max(0, avatarComp.avatarRadius - avatarComp.borderWidth)
+            }
+        }
+
+        Image {
+            id: avatarImg
+            anchors.fill: parent
+            anchors.margins: avatarComp.borderWidth
+            source: root.avatarSource
+            sourceSize: Qt.size(width * 2, height * 2)
+            fillMode: Image.PreserveAspectCrop
+            visible: status === Image.Ready
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: maskContainer
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: avatarComp.avatarRadius
+            color: "transparent"
+            border.width: avatarComp.borderWidth
+            border.color: avatarComp.borderColor
+            visible: avatarComp.borderWidth > 0
+            z: 3
+        }
+    }
+
+    function openEditDialog() {
+        if (editLoader.active && editLoader.item) {
+            editLoader.item.close();
+        } else {
+            editLoader.open();
+        }
+    }
+
+    function cycleSize() {
+        if (root.sizeMode === "1x1") root.sizeMode = "1x2"
+        else if (root.sizeMode === "1x2") root.sizeMode = "2x2"
+        else if (root.sizeMode === "2x2") root.sizeMode = "2x3"
+        else root.sizeMode = "1x1"
+        root.configEntry.sizeMode = root.sizeMode
     }
 
     Item {
-        id: sizedContainer
-        implicitWidth: root.widgetWidth
-        implicitHeight: root.widgetHeight
+        id: cardContainer
+        anchors.fill: parent
 
         Loader {
             anchors.fill: parent
             sourceComponent: {
                 if (root.sizeMode === "1x1") return oneByOneContent
                 if (root.sizeMode === "1x2") return oneByTwoContent
+                if (root.sizeMode === "2x3") return twoByThreeContent
                 return twoByTwoContent
             }
         }
 
-        // 1x1
+        // ══════════════════════════════════════════
+        // ─── 1x1 (Avatar Circular Compacto) ───
+        // ══════════════════════════════════════════
         Component {
             id: oneByOneContent
             Item {
                 id: avatarSingleWrap
                 anchors.fill: parent
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: avatarSingleWrap.width
-                        height: avatarSingleWrap.height
-                        radius: Appearance.rounding?.verylarge ?? 30
+
+                CardBackground {
+                    cardRadius: Appearance.rounding?.verylarge ?? 30
+                }
+
+                Item {
+                    anchors.fill: parent
+
+                    RoundAvatar {
+                        anchors.fill: parent
+                        avatarRadius: (Appearance.rounding?.verylarge ?? 30)
                     }
-                }
 
-                Rectangle {
-                    anchors.fill: parent
-                    color: Appearance.colors.colLayer0
-                }
+                    // Botão discreto para alterar tamanho / editar
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 6
+                        width: 24
+                        height: 24
+                        radius: 12
+                        color: Appearance.colors.colPrimary
+                        opacity: avatarSingleMouse.containsMouse ? 1 : 0.7
+                        z: 5
 
-                AvatarImage {
-                    id: avatarSingle
-                    anchors.fill: parent
-                }
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "aspect_ratio"
+                            iconSize: 14
+                            color: Appearance.colors.colOnPrimary
+                        }
+                    }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "account_circle"
-                    iconSize: 32
-                    color: Appearance.colors.colOnPrimaryContainer
-                    visible: avatarSingle.status === Image.Error
+                    MouseArea {
+                        id: avatarSingleMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openEditDialog()
+                        onDoubleClicked: root.cycleSize()
+                    }
                 }
             }
         }
 
-        // 1x2
+        // ══════════════════════════════════════════
+        // ─── 1x2 (Banner Compacto Horizontal) ───
+        // ══════════════════════════════════════════
         Component {
             id: oneByTwoContent
-            Rectangle {
+            Item {
                 anchors.fill: parent
-                radius: Appearance.rounding?.verylarge ?? 30
-                color: Appearance.colors.colPrimaryContainer
+
+                CardBackground {
+                    cardRadius: Appearance.rounding?.verylarge ?? 30
+                }
 
                 RowLayout {
-                    anchors { fill: parent; margins: 10 }
+                    anchors { fill: parent; margins: 12 }
                     spacing: 12
 
-                    Item {
-                        id: avatarWideWrap
+                    RoundAvatar {
+                        width: parent.height
+                        height: parent.height
                         Layout.preferredWidth: parent.height
-                        Layout.preferredHeight: parent.height 
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: avatarWideWrap.width
-                                height: avatarWideWrap.height
-                                radius: (Appearance.rounding?.verylarge ?? 30) - 6
-                            }
-                        }
+                        Layout.preferredHeight: parent.height
+                        avatarRadius: (Appearance.rounding?.verylarge ?? 30) - 6
 
-                        Rectangle {
+                        MouseArea {
                             anchors.fill: parent
-                            color: Appearance.colors.colLayer0
-                        }
-
-                        AvatarImage {
-                            id: avatarWide
-                            anchors.fill: parent
-                        }
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "account_circle"
-                            iconSize: 32
-                            color: Appearance.colors.colOnPrimaryContainer
-                            visible: avatarWide.status === Image.Error
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.openEditDialog()
                         }
                     }
 
@@ -205,29 +358,45 @@ AbstractBackgroundWidget {
                         Layout.fillHeight: true
                         spacing: 2
 
-                        Item { Layout.fillHeight: true }
-
-                        StyledText {
+                        RowLayout {
                             Layout.fillWidth: true
-                            text: "Hi, " + root.username + "!"
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnPrimaryContainer
-                            elide: Text.ElideRight
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: root.username
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnPrimaryContainer
+                                elide: Text.ElideRight
+                            }
+
+                            MaterialSymbol {
+                                text: "edit"
+                                iconSize: 15
+                                color: Appearance.colors.colOnPrimaryContainer
+                                opacity: editWideMouse.containsMouse ? 1.0 : 0.6
+                                MouseArea {
+                                    id: editWideMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.openEditDialog()
+                                }
+                            }
                         }
 
                         StyledText {
                             Layout.fillWidth: true
-                            text: root.greetingText
+                            text: root.userBio.length > 0 ? root.userBio : root.greetingText
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: Appearance.colors.colOnPrimaryContainer
-                            opacity: 0.8
+                            opacity: 0.85
                             elide: Text.ElideRight
                         }
 
                         StyledText {
+                            visible: root.configEntry.showUptime ?? true
                             Layout.fillWidth: true
-                            text: root.todayString
+                            text: "Up • " + DateTime.uptime
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colOnPrimaryContainer
                             opacity: 0.6
@@ -238,164 +407,361 @@ AbstractBackgroundWidget {
             }
         }
 
-        // 2x2 (original design)
+        // ══════════════════════════════════════════
+        // ─── 2x2 (Card Completo de Perfil) ───
+        // ══════════════════════════════════════════
         Component {
             id: twoByTwoContent
             Item {
-                id: outerRect
                 implicitWidth: root.snapWidth3
                 implicitHeight: root.snapHeight3
 
-                StyledDropShadow {
-                    target: outerRect
+                CardBackground {
+                    cardRadius: Appearance.rounding?.verylarge ?? 30
                 }
 
-                Item {
-                    id: bgImage
-                    anchors.fill: parent
-                    visible: false
-
-                    property string effectiveSource: "file://" + (GlobalStates.screenLocked && Config.options.background.lockWall !== ""
-                        ? Config.options.background.lockWall
-                        : Config.options.background.wallpaperPath)
-
-                    Image {
-                        id: bgImageA
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                        opacity: 1
-                        Behavior on opacity {
-                            NumberAnimation { duration: 400; easing.type: Easing.InOutCubic }
-                        }
+                ColumnLayout {
+                    anchors {
+                        fill: parent
+                        margins: 16
                     }
-                    Image {
-                        id: bgImageB
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
-                        opacity: 0
-                        Behavior on opacity {
-                            NumberAnimation { duration: 400; easing.type: Easing.InOutCubic }
+                    spacing: 10
+
+                    // Top: Avatar + Nome + Uptime
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
+
+                        RoundAvatar {
+                            width: root.avatarSize
+                            height: root.avatarSize
+                            Layout.preferredWidth: root.avatarSize
+                            Layout.preferredHeight: root.avatarSize
+                            avatarRadius: root.avatarSize / 2
+                            borderWidth: 2
+                            borderColor: Appearance.colors.colPrimary
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openEditDialog()
+                            }
                         }
-                    }
 
-                    property bool usingA: true
-
-                    onEffectiveSourceChanged: {
-                        if (usingA) {
-                            bgImageB.source = effectiveSource
-                            bgImageB.opacity = 1
-                            bgImageA.opacity = 0
-                        } else {
-                            bgImageA.source = effectiveSource
-                            bgImageA.opacity = 1
-                            bgImageB.opacity = 0
-                        }
-                        usingA = !usingA
-                    }
-
-                    Component.onCompleted: {
-                        bgImageA.source = effectiveSource
-                    }
-                }
-
-                FastBlur {
-                    id: blurredBg
-                    anchors.fill: bgImage
-                    source: bgImage
-                    radius: 48
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: outerRect.width
-                            height: outerRect.height
-                            radius: Appearance.rounding?.verylarge ?? 30
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: blurredBg
-                    radius: Appearance.rounding?.verylarge ?? 30
-                    color: Appearance.colors.colScrim
-                    opacity: 0.1
-                }
-
-                Rectangle {
-                    id: contentBox
-                    x: root.blurMargin
-                    y: root.avatarSize / 2 + root.blurMargin + 30
-                    width: 240
-                    color: Appearance.colors.colPrimaryContainer
-                    radius: Appearance.rounding.large
-                    implicitHeight: contentColumn.implicitHeight + 30
-
-                    ColumnLayout {
-                        id: contentColumn
-                        anchors {
-                            top: parent.top
-                            left: parent.left
-                            right: parent.right
-                            margins: 16
-                        }
-                        Layout.topMargin: root.avatarSize / 2 + 4
-                        spacing: 10
-
-                        Item {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: root.avatarSize / 2
-                        }
+                            spacing: 1
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 6
-
-                            MaterialSymbol {
-                                Layout.alignment: Qt.AlignTop
-                                Layout.topMargin: 2
-                                iconSize: Appearance.font.pixelSize.normal
-                                text: root.currentQuip.icon
+                            StyledText {
+                                text: root.username
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Bold
                                 color: Appearance.colors.colOnPrimaryContainer
-                                opacity: 0.85
+                                elide: Text.ElideRight
                             }
 
                             StyledText {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                font.pixelSize: Appearance.font.pixelSize.small
+                                text: "@" + root.hostname
+                                font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: Appearance.colors.colOnPrimaryContainer
-                                opacity: 0.85
-                                text: root.currentQuip.text
+                                opacity: 0.6
+                                elide: Text.ElideRight
                             }
-                        } 
 
+                            StyledText {
+                                visible: root.configEntry.showUptime ?? true
+                                text: "Up • " + DateTime.uptime
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colPrimary
+                                font.weight: Font.Medium
+                            }
+                        }
+                    }
+
+                    // Divisor
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 1
+                        color: Appearance.colors.colOutlineVariant
+                        opacity: 0.25
+                    }
+
+                    // Bio ou Frase do Clima
+                    RowLayout {
+                        visible: root.configEntry.showQuip ?? true
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: 2
+                            iconSize: Appearance.font.pixelSize.normal
+                            text: root.userBio.length > 0 ? "format_quote" : root.currentQuip.icon
+                            color: Appearance.colors.colOnPrimaryContainer
+                            opacity: 0.85
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            maximumLineCount: 2
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnPrimaryContainer
+                            opacity: 0.85
+                            text: root.userBio.length > 0 ? root.userBio : root.currentQuip.text
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
+
+                    // Botões de Ação Rápida
+                    RowLayout {
+                        visible: root.configEntry.showActions ?? true
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 36
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colOnPrimaryContainer
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                MaterialSymbol {
+                                    iconSize: Appearance.font.pixelSize.small
+                                    text: "lock"
+                                    color: Appearance.colors.colPrimaryContainer
+                                }
+                                StyledText {
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.DemiBold
+                                    color: Appearance.colors.colPrimaryContainer
+                                    text: GlobalStates.screenLocked ? Translation.tr("Locked") : Translation.tr("Lock")
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: GlobalStates.screenLocked = true
+                            }
+                        }
+
+                        Rectangle {
+                            implicitWidth: 36
+                            implicitHeight: 36
+                            radius: 18
+                            color: editBtnMouse.containsMouse ? Appearance.colors.colLayer2 : "transparent"
+                            border.width: 1
+                            border.color: Appearance.colors.colOnPrimaryContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                iconSize: 16
+                                text: "edit"
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                            MouseArea {
+                                id: editBtnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openEditDialog()
+                            }
+                        }
+
+                        Rectangle {
+                            implicitWidth: 36
+                            implicitHeight: 36
+                            radius: 18
+                            color: "transparent"
+                            border.width: 1
+                            border.color: Appearance.colors.colOnPrimaryContainer
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                iconSize: 16
+                                text: "settings"
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: GlobalStates.settingsOpen = true
+                            }
+                        }
+
+                        Rectangle {
+                            implicitWidth: 36
+                            implicitHeight: 36
+                            radius: 18
+                            color: "transparent"
+                            border.width: 1
+                            border.color: Appearance.colors.colOnPrimaryContainer
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                iconSize: 16
+                                text: "power_settings_new"
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: GlobalStates.sessionOpen = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════
+        // ─── 2x3 (Card Panorâmico Estendido) ───
+        // ══════════════════════════════════════════
+        Component {
+            id: twoByThreeContent
+            Item {
+                anchors.fill: parent
+
+                CardBackground {
+                    cardRadius: Appearance.rounding?.verylarge ?? 30
+                }
+
+                RowLayout {
+                    anchors { fill: parent; margins: 16 }
+                    spacing: 16
+
+                    // Coluna 1: Avatar Grande e Identidade
+                    ColumnLayout {
+                        Layout.preferredWidth: 140
+                        Layout.fillHeight: true
+                        spacing: 8
+
+                        RoundAvatar {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 80
+                            height: 80
+                            Layout.preferredWidth: 80
+                            Layout.preferredHeight: 80
+                            avatarRadius: 40
+                            borderWidth: 3
+                            borderColor: Appearance.colors.colPrimary
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openEditDialog()
+                            }
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.username
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnPrimaryContainer
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "@" + root.hostname
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnPrimaryContainer
+                            opacity: 0.6
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: 1
+                        color: Appearance.colors.colOutlineVariant
+                        opacity: 0.4
+                    }
+
+                    // Coluna 2: Bio, Estatísticas e Ações
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 8
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.userBio.length > 0 ? ("“" + root.userBio + "”") : root.greetingText
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.italic: root.userBio.length > 0
+                            color: Appearance.colors.colOnPrimaryContainer
+                            opacity: 0.9
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        // Stats do Sistema
                         RowLayout {
                             Layout.fillWidth: true
-                            Layout.topMargin: 4
+                            spacing: 12
+
+                            ColumnLayout {
+                                spacing: 1
+                                StyledText {
+                                    text: Translation.tr("Uptime")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                    opacity: 0.6
+                                }
+                                StyledText {
+                                    text: DateTime.uptime
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                spacing: 1
+                                StyledText {
+                                    text: Translation.tr("Distro")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                    opacity: 0.6
+                                }
+                                StyledText {
+                                    text: SystemInfo.distroName
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                    elide: Text.ElideRight
+                                    Layout.maximumWidth: 100
+                                }
+                            }
+                        }
+
+                        // Ações Rápidas
+                        RowLayout {
+                            Layout.fillWidth: true
                             spacing: 8
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                implicitHeight: 40
-                                radius: Appearance.rounding.full
+                                implicitHeight: 34
+                                radius: Appearance.rounding.small
                                 color: Appearance.colors.colOnPrimaryContainer
 
                                 RowLayout {
                                     anchors.centerIn: parent
                                     spacing: 4
                                     MaterialSymbol {
-                                        iconSize: Appearance.font.pixelSize.normal
+                                        iconSize: 14
                                         text: "lock"
                                         color: Appearance.colors.colPrimaryContainer
                                     }
                                     StyledText {
-                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
                                         font.weight: Font.DemiBold
                                         color: Appearance.colors.colPrimaryContainer
-                                        text: GlobalStates.screenLocked ? "Locked" : "Lock"
+                                        text: Translation.tr("Lock")
                                     }
                                 }
                                 MouseArea {
@@ -406,17 +772,35 @@ AbstractBackgroundWidget {
                             }
 
                             Rectangle {
-                                implicitWidth: 40
-                                implicitHeight: 40
-                                radius: 20
-                                color: "transparent"
-                                border.width: 1
-                                border.color: Appearance.colors.colOnPrimaryContainer
+                                implicitWidth: 34
+                                implicitHeight: 34
+                                radius: Appearance.rounding.small
+                                color: Appearance.colors.colLayer2
+
                                 MaterialSymbol {
                                     anchors.centerIn: parent
-                                    iconSize: Appearance.font.pixelSize.normal
+                                    iconSize: 16
+                                    text: "edit"
+                                    color: Appearance.colors.colPrimary
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.openEditDialog()
+                                }
+                            }
+
+                            Rectangle {
+                                implicitWidth: 34
+                                implicitHeight: 34
+                                radius: Appearance.rounding.small
+                                color: Appearance.colors.colLayer2
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    iconSize: 16
                                     text: "settings"
-                                    color: Appearance.colors.colOnPrimaryContainer
+                                    color: Appearance.colors.colPrimary
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -424,106 +808,53 @@ AbstractBackgroundWidget {
                                     onClicked: GlobalStates.settingsOpen = true
                                 }
                             }
-
-                            Rectangle {
-                                implicitWidth: 40
-                                implicitHeight: 40
-                                radius: 20
-                                color: "transparent"
-                                border.width: 1
-                                border.color: Appearance.colors.colOnPrimaryContainer
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    text: "power_settings_new"
-                                    color: Appearance.colors.colOnPrimaryContainer
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: GlobalStates.sessionOpen = true
-                                }
-                            }
                         }
-                    }
-                }
-
-                Rectangle {
-                    id: avatarRect
-                    x: root.blurMargin + 16
-                    y: contentBox.y - root.avatarSize / 2
-                    width: root.avatarSize + 10
-                    height: root.avatarSize + 10
-                    radius: width / 2
-                    color: Appearance.colors.colPrimaryContainer
-                    border.width: 3
-                    border.color: Appearance.colors.colLayer1
-                    z: 2
-
-                    Image {
-                        id: avatarImage
-                        anchors.fill: parent
-                        anchors.margins: 3
-                        source: Config.options.profile.avatarPath !== ""
-                            ? "file://" + Config.options.profile.avatarPicture
-                            : "file:///home/" + (Quickshell.env("USER") ?? "user") + "/.face"
-                        sourceSize.width: avatarImage.width * 2
-                        sourceSize.height: avatarImage.height * 2
-                        fillMode: Image.PreserveAspectCrop
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: avatarRect.width - 6
-                                height: avatarRect.height - 6
-                                radius: (avatarRect.width - 6) / 2
-                            }
-                        }
-                        onStatusChanged: {
-                            if (status === Image.Error)
-                                visible = false
-                        }
-                    }
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "account_circle"
-                        iconSize: 32
-                        color: Appearance.colors.colOnPrimaryContainer
-                        visible: avatarImage.status === Image.Error
-                    }
-                }
-
-                ColumnLayout {
-                    x: avatarRect.x + avatarRect.width + 13
-                    y: avatarRect.y + (avatarRect.height - implicitHeight) / 2 + 20
-                    spacing: 0
-                    z: 2
-
-                    StyledText {
-                        text: root.userDisplay
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnLayer1
-                    }
-                    StyledText {
-                        text: "Up • " + DateTime.uptime
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnLayer1
-                        opacity: 0.6
                     }
                 }
             }
         }
 
+        // ══════════════════════════════════════════
+        // ─── Resize Handler ───
+        // ══════════════════════════════════════════
         ResizeHandler {
-            anchorItem: sizedContainer
+            anchorItem: cardContainer
             hoverActive: root.containsMouse
             locked: Config.options.background.widgetsLocked
             currentWidth: root.widgetWidth
-            resizeMode: "diagonal"
-            onResizedXY: (dx, dy, startWidth) => { root.sizeMode = root.modeForDrag(dx, dy, startWidth) }
+            onResized: (newWidth) => {
+                if (newWidth < 190) {
+                    root.sizeMode = "1x1";
+                } else if (newWidth < 340) {
+                    root.sizeMode = "1x2";
+                } else if (newWidth < 400) {
+                    root.sizeMode = "2x2";
+                } else {
+                    root.sizeMode = "2x3";
+                }
+            }
             onResizeFinished: {
-                root.configEntry.sizeMode = root.sizeMode
+                root.configEntry.sizeMode = root.sizeMode;
+            }
+        }
+    }
+
+    Loader {
+        id: editLoader
+        function open() {
+            editLoader.active = true;
+        }
+        active: false
+        sourceComponent: EditProfileDialog {
+            Component.onCompleted: this.open()
+            anchor {
+                window: root.QsWindow.window
+                item: root
+                gravity: Edges.Bottom
+                edges: Edges.Top
+            }
+            onDialogClosed: {
+                editLoader.active = false;
             }
         }
     }

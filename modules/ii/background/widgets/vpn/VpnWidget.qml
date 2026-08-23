@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
 import Quickshell
 import qs
 import qs.services
@@ -28,7 +27,7 @@ AbstractBackgroundWidget {
             id: contentRect
             anchors.fill: parent
             color: Appearance.colors.colPrimaryContainer
-            radius: Appearance.rounding?.verylarge ?? 30
+            radius: Appearance.rounding.verylarge
 
             ColumnLayout {
                 anchors.fill: parent
@@ -64,55 +63,100 @@ AbstractBackgroundWidget {
 
                 // ─── Detalhes de Conexão ───
                 ColumnLayout {
+                    id: detailsCol
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 2
 
                     StyledText {
-                        text: VpnService.connected ? Translation.tr("Secure Tunnel Active") : Translation.tr("VPN Disconnected")
+                        text: VpnService.connected ? Translation.tr("Secure Tunnel Active") : Translation.tr("VPN Tunnel Inactive")
                         font.pixelSize: Appearance.font.pixelSize.small
                         font.weight: Font.Medium
                         color: VpnService.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnPrimaryContainer
                     }
 
                     StyledText {
-                        text: VpnService.connected ? `${VpnService.vpnName} (${VpnService.interfaceName})` : Translation.tr("Traffic unencrypted")
+                        id: detailText
+                        text: VpnService.connected ? `${VpnService.vpnName} (${VpnService.interfaceName})` : Translation.tr("Not routed through a VPN")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colSubtext
                         elide: Text.ElideRight
+                        Layout.fillWidth: true
                     }
                 }
 
-                // ─── Botão Ação ───
-                Rectangle {
+                // ─── Ações ───
+                RowLayout {
                     Layout.fillWidth: true
-                    implicitHeight: 36
-                    radius: Appearance.rounding.normal
-                    color: btnMouse.containsMouse ? Appearance.colors.colLayer1 : Appearance.colors.colLayer2
+                    spacing: 8
 
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 6
+                    Rectangle {
+                        id: toggleBtn
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        radius: Appearance.rounding.normal
+                        color: toggleMouse.containsMouse
+                            ? (VpnService.connected ? Appearance.colors.colError : Appearance.colors.colPrimary)
+                            : (VpnService.connected ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2)
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: VpnService.connected ? "link_off" : "link"
+                                iconSize: 16
+                                color: toggleMouse.containsMouse
+                                    ? Appearance.colors.colOnPrimary
+                                    : (VpnService.connected ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer0)
+                            }
+                            StyledText {
+                                text: VpnService.connected ? Translation.tr("Disconnect") : Translation.tr("Connect")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: toggleMouse.containsMouse
+                                    ? Appearance.colors.colOnPrimary
+                                    : (VpnService.connected ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer0)
+                            }
+                        }
+
+                        MouseArea {
+                            id: toggleMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                Quickshell.execDetached(["bash", "-c",
+                                    "nm-connection-editor 2>/dev/null || notify-send 'Network' 'No network manager found'"
+                                ]);
+                            }
+                        }
+                    }
+
+                    // Ação secundária: abrir configurações de rede
+                    Rectangle {
+                        id: settingsBtn
+                        implicitWidth: 36
+                        implicitHeight: 36
+                        radius: Appearance.rounding.normal
+                        color: settingsMouse.containsMouse ? Appearance.colors.colLayer1 : Appearance.colors.colLayer2
 
                         MaterialSymbol {
+                            anchors.centerIn: parent
                             text: "settings"
                             iconSize: 16
                             color: Appearance.colors.colPrimary
                         }
-                        StyledText {
-                            text: Translation.tr("Network Settings")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnLayer0
-                        }
-                    }
 
-                    MouseArea {
-                        id: btnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            Quickshell.execDetached(["bash", "-c", "nm-connection-editor 2>/dev/null || notify-send 'Network' 'No network manager found'"]);
+                        MouseArea {
+                            id: settingsMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                Quickshell.execDetached(["bash", "-c",
+                                    "nm-connection-editor 2>/dev/null || notify-send 'Network' 'No network manager found'"
+                                ]);
+                            }
                         }
                     }
                 }

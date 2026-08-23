@@ -17,7 +17,7 @@ RowLayout {
     property bool usePercentTooltip: true
     property real from: slider.from
     property real to: slider.to
-    property real textWidth: 120
+    property real textWidth: 160
     property bool showLabel: true
 
     RowLayout {
@@ -33,12 +33,15 @@ RowLayout {
         StyledText {
             id: labelWidget
             Layout.preferredWidth: root.textWidth
+            Layout.maximumWidth: root.textWidth
+            elide: Text.ElideRight
             text: root.text
             color: Appearance.colors.colOnSecondaryContainer
         }
     }
     StyledSlider {
         id: slider
+        Layout.fillWidth: true
         configuration: StyledSlider.Configuration.XS
         usePercentTooltip: root.usePercentTooltip
         value: root.value

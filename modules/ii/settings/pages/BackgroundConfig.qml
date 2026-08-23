@@ -367,6 +367,11 @@ ContentPage {
                             Config.options.background.parallax.enableSidebar = checked;
                         }
                     }
+                }
+
+                GroupedList {
+                    visible: Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar
+                    Layout.topMargin: 6
 
                     ConfigSwitch {
                         Layout.fillWidth: true
@@ -380,7 +385,6 @@ ContentPage {
                     }
 
                     ConfigSlider {
-                        visible: Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar
                         text: Translation.tr("Preferred wallpaper zoom")
                         value: Config.options.background.parallax.workspaceZoom * 100
                         usePercentTooltip: true
@@ -989,6 +993,126 @@ ContentPage {
                     ]
                     onSelected: newValue => {
                         Config.options.background.widgets.customImage.shape = newValue
+                    }
+                }
+            }
+        }
+
+        ContentSection {
+            icon: "person"
+            shape: MaterialShape.Shape.Cookie7Sided
+            title: Translation.tr("User Card & Profile")
+
+            GroupedList {
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "check"
+                    text: Translation.tr("Enable User Card")
+                    checked: Config.options.background.widgets.userCard.enable
+                    onCheckedChanged: {
+                        Config.options.background.widgets.userCard.enable = checked;
+                    }
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("Card Size")
+                    icon: "aspect_ratio"
+                    currentValue: Config.options.background.widgets.userCard.sizeMode ?? "2x2"
+                    onSelected: newValue => {
+                        Config.options.background.widgets.userCard.sizeMode = newValue;
+                    }
+                    options: [
+                        { displayName: "1x1", icon: "circle",         value: "1x1" },
+                        { displayName: "1x2", icon: "dock_to_bottom", value: "1x2" },
+                        { displayName: "2x2", icon: "dashboard",      value: "2x2" },
+                        { displayName: "2x3", icon: "view_agenda",    value: "2x3" }
+                    ]
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("Card Style")
+                    icon: "palette"
+                    currentValue: Config.options.background.widgets.userCard.style ?? "glass"
+                    onSelected: newValue => {
+                        Config.options.background.widgets.userCard.style = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Frosted Glass"), icon: "blur_on",     value: "glass" },
+                        { displayName: Translation.tr("Material Flat"), icon: "crop_square", value: "flat" }
+                    ]
+                }
+
+                ConfigTextArea {
+                    id: displayNameField
+                    Layout.fillWidth: true
+                    fieldWidth: 300
+                    buttonIcon: "badge"
+                    text: Translation.tr("Display Name")
+                    placeholderText: Translation.tr("Your name or nickname")
+                    value: Config.options.profile.displayName
+                    onValueChanged: {
+                        nameDebounceTimer.restart();
+                    }
+
+                    Timer {
+                        id: nameDebounceTimer
+                        interval: 600
+                        repeat: false
+                        onTriggered: {
+                            Config.options.profile.displayName = displayNameField.value;
+                        }
+                    }
+                }
+
+                ConfigTextArea {
+                    id: bioFieldConfig
+                    Layout.fillWidth: true
+                    fieldWidth: 300
+                    buttonIcon: "edit_note"
+                    text: Translation.tr("Bio / Status Message")
+                    placeholderText: Translation.tr("Tell something about yourself...")
+                    value: Config.options.profile.bio
+                    onValueChanged: {
+                        bioDebounceTimer.restart();
+                    }
+
+                    Timer {
+                        id: bioDebounceTimer
+                        interval: 600
+                        repeat: false
+                        onTriggered: {
+                            Config.options.profile.bio = bioFieldConfig.value;
+                        }
+                    }
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "touch_app"
+                    text: Translation.tr("Show Action Buttons")
+                    checked: Config.options.background.widgets.userCard.showActions ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.userCard.showActions = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "timelapse"
+                    text: Translation.tr("Show System Uptime")
+                    checked: Config.options.background.widgets.userCard.showUptime ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.userCard.showUptime = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    buttonIcon: "partly_cloudy_day"
+                    text: Translation.tr("Show Weather / Status Quip")
+                    checked: Config.options.background.widgets.userCard.showQuip ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.userCard.showQuip = checked;
                     }
                 }
             }
