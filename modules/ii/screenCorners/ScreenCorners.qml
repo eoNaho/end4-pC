@@ -24,7 +24,7 @@ Scope {
         id: cornerPanelWindow
         property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
         property bool fullscreen
-        visible: (Config.options.appearance.fakeScreenRounding === 1 || (Config.options.appearance.fakeScreenRounding === 2 && !fullscreen))
+        visible: Config.options.appearance.fakeScreenRounding > 0
         property var corner
 
         exclusionMode: ExclusionMode.Ignore
@@ -32,7 +32,7 @@ Scope {
             item: sidebarCornerOpenInteractionLoader.active ? sidebarCornerOpenInteractionLoader : null
         }
         WlrLayershell.namespace: "quickshell:screenCorners"
-        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.layer: (Config.options.appearance.fakeScreenRounding === 1 || !cornerPanelWindow.fullscreen) ? WlrLayer.Overlay : WlrLayer.Top
         color: "transparent"
 
         anchors {
