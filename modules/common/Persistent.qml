@@ -85,6 +85,8 @@ Singleton {
 
             property JsonObject record: JsonObject {
                 property bool enable: false
+                property double start: 0
+                property bool paused: false
             }
 
             property JsonObject overlay: JsonObject {

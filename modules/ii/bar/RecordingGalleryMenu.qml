@@ -38,14 +38,28 @@ PopupWindow {
 
     Process {
         id: fetchProc
-        command: ["bash", "-c", "find ~/Pictures/Screenshots ~/Videos/Recordings ~/Imagens/Screenshots ~/Vídeos/Gravações -maxdepth 1 -type f \\( -name '*.png' -o -name '*.jpg' -o -name '*.mp4' -o -name '*.mkv' -o -name '*.webp' \\) 2>/dev/null | xargs -r ls -t 2>/dev/null | head -n 6"]
+        command: ["bash", "-c", `
+            dirs=()
+            [[ -n "${Config.options.screenRecord.savePath}" ]] && dirs+=("${Config.options.screenRecord.savePath}")
+            [[ -n "${Config.options.screenSnip.savePath}" ]] && dirs+=("${Config.options.screenSnip.savePath}")
+            dirs+=("$HOME/Pictures/Screenshots" "$HOME/Videos" "$HOME/Videos/Recordings" "$HOME/Imagens/Screenshots" "$HOME/Vídeos/Gravações")
+            
+            existing_dirs=()
+            for d in "\${dirs[@]}"; do
+                [[ -d "$d" ]] && existing_dirs+=("$d")
+            done
+            
+            if [[ \${#existing_dirs[@]} -gt 0 ]]; then
+                find "\${existing_dirs[@]}" -maxdepth 1 -type f \\( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.mp4' -o -name '*.mkv' -o -name '*.webm' -o -name '*.gif' -o -name '*.webp' \\) 2>/dev/null | xargs -r ls -t 2>/dev/null | head -n 8
+            fi
+        `]
         stdout: StdioCollector {
             onStreamFinished: {
                 const lines = text.trim().split("\n").filter(l => l.length > 0);
                 root.filesList = lines.map(p => {
                     const parts = p.split("/");
                     const name = parts[parts.length - 1];
-                    const isVideo = p.endsWith(".mp4") || p.endsWith(".mkv");
+                    const isVideo = p.endsWith(".mp4") || p.endsWith(".mkv") || p.endsWith(".webm") || p.endsWith(".gif");
                     return { path: p, name: name, isVideo: isVideo };
                 });
             }

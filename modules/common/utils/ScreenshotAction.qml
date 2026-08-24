@@ -25,18 +25,22 @@ Singleton {
     property string imageSearchEngineBaseUrl: Config.options.search.imageSearch.imageSearchEngineBaseUrl
     property string fileUploadApiEndpoint: "https://uguu.se/upload"
 
-    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "", resultPath = "") {
+    function getCommand(x, y, width, height, screenshotPath, action, saveDir = "", resultPath = "", globalX = x, globalY = y, globalWidth = width, globalHeight = height) {
         // Set command for action
         const rx = Math.round(x);
         const ry = Math.round(y);
         const rw = Math.round(width);
         const rh = Math.round(height);
+        const gx = Math.round(globalX);
+        const gy = Math.round(globalY);
+        const gw = Math.round(globalWidth);
+        const gh = Math.round(globalHeight);
         const cropBase = `magick '${StringUtils.shellSingleQuoteEscape(screenshotPath)}' `
             + `-crop ${rw}x${rh}+${rx}+${ry} +repage`
         const cropToStdout = `${cropBase} -`
         const cropInPlace = `${cropBase} '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`
         const cleanup = `rm -f '${StringUtils.shellSingleQuoteEscape(screenshotPath)}'`
-        const slurpRegion = `${rx},${ry} ${rw}x${rh}`
+        const slurpRegion = `${gx},${gy} ${gw}x${gh}`
         const uploadAndGetUrl = (filePath) => {
             return `curl -sF files[]=@'${StringUtils.shellSingleQuoteEscape(filePath)}' ${root.fileUploadApiEndpoint} | jq -r '.files[0].url'`
         }

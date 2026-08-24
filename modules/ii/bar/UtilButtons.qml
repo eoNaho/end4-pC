@@ -63,7 +63,7 @@ Item {
                 showTextOnHover: true
                 onClicked: {
                     if (isRecording) {
-                        Quickshell.execDetached([Directories.recordScriptPath]);
+                        ScreenRecord.stopRecord();
                     } else {
                         GlobalStates.overlayOpen = false;
                         Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "recordWithSound"]);
@@ -78,7 +78,7 @@ Item {
                 material: true
                 onClicked: {
                     if (isRecording) {
-                        Quickshell.execDetached([Directories.recordScriptPath]);
+                        ScreenRecord.stopRecord();
                     } else {
                         GlobalStates.overlayOpen = false;
                         Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "recordWithSound"]);

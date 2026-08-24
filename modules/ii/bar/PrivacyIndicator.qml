@@ -13,7 +13,8 @@ Item {
     property bool borderless: Config.options.bar.borderless
     property bool isMaterial: Config.options.bar.cornerStyle === 3
 
-    readonly property bool isRecording: Privacy.micActive || Privacy.screenSharing
+    readonly property bool isScreenRecording: Persistent.states.record?.enable ?? false
+    readonly property bool isRecording: Privacy.micActive || Privacy.screenSharing || isScreenRecording
 
     implicitWidth: 32
     implicitHeight: 32
@@ -23,11 +24,18 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        onClicked: {
+            if (root.isScreenRecording) {
+                ScreenRecord.stopRecord();
+            } else {
+                GlobalStates.overlayOpen = !GlobalStates.overlayOpen;
+            }
+        }
     }
 
     MaterialSymbol {
         anchors.centerIn: parent
-        text: Privacy.screenSharing ? "screen_share" : (Privacy.micActive ? "mic" : "security")
+        text: root.isScreenRecording ? "screen_record" : (Privacy.screenSharing ? "screen_share" : (Privacy.micActive ? "mic" : "security"))
         iconSize: Appearance.font.pixelSize.larger
         fill: root.isRecording ? 1 : 0
         color: root.isRecording
@@ -37,11 +45,13 @@ Item {
 
     PopupToolTip {
         id: tooltip
-        text: Privacy.screenSharing
-            ? Translation.tr("Screen sharing is active")
-            : (Privacy.micActive
-                ? Translation.tr("Microphone is currently in use")
-                : Translation.tr("No active recordings"))
+        text: root.isScreenRecording
+            ? Translation.tr("Screen recording is in progress")
+            : (Privacy.screenSharing
+                ? Translation.tr("Screen sharing is active")
+                : (Privacy.micActive
+                    ? Translation.tr("Microphone is currently in use")
+                    : Translation.tr("No active recordings")))
         extraVisibleCondition: mouseArea.containsMouse
         alternativeVisibleCondition: extraVisibleCondition
         anchorEdges: (!Config.options.bar.bottom && !Config.options.bar.vertical) ? Edges.Bottom : Edges.Top

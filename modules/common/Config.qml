@@ -528,6 +528,7 @@ Singleton {
                 property bool showPinButton: true
                 property bool showAppsButton: true
                 property bool showMedia: true
+                property bool showRecorder: false
                 property bool monochromeIcons: true
                 property real height: 60
                 property real hoverRegionHeight: 2
@@ -772,6 +773,14 @@ Singleton {
 
             property JsonObject screenRecord: JsonObject {
                 property string savePath: Directories.videos.replace("file://","") // strip "file://"
+                property string audioSource: "desktop" // "none" | "desktop" | "mic" | "both"
+                property string encoder: "auto" // "auto" | "nvenc" | "vaapi" | "cpu"
+                property string format: "mp4" // "mp4" | "mkv" | "webm" | "gif"
+                property int fps: 60 // 30 | 60 | 120
+                property string quality: "high" // "low" | "medium" | "high" | "lossless"
+                property int countdown: 0 // 0 | 3 | 5
+                property bool recordCursor: true
+                property bool notifyOnComplete: true
             }
 
             property JsonObject screenSnip: JsonObject {

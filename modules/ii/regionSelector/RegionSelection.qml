@@ -342,7 +342,11 @@ PanelWindow {
             root.screenshotPath, //
             screenshotAction, //
             screenshotDir, //
-            resultPath
+            resultPath, //
+            root.monitorOffsetX + root.regionX,
+            root.monitorOffsetY + root.regionY,
+            root.regionWidth,
+            root.regionHeight
         )
         if (isCopy) {
             // Copy runs through a Process so completion is observable and the

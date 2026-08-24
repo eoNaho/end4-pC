@@ -224,6 +224,14 @@ Scope {
                                         visible: true
                                     }
 
+                                    DockRecordButton {
+                                        visible: ScreenRecord.recording || (Config.options?.dock?.showRecorder ?? false)
+                                        Layout.fillHeight: true
+                                        Layout.topMargin: 2
+                                        topInset: dockRow.padding + 8
+                                        bottomInset: dockRow.padding + 8
+                                    }
+
                                     DockTrashButton {
                                         Layout.fillHeight: true
                                         Layout.topMargin: 2

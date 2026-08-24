@@ -107,9 +107,9 @@ ContentPage {
         }
 
         ContentSection {
-            icon: "file_open"
-            shape: MaterialShape.Shape.Slanted
-            title: Translation.tr("Save paths")
+            icon: "screen_record"
+            shape: MaterialShape.Shape.Flower
+            title: Translation.tr("Screen Recording")
 
             GroupedList {
                 ConfigTextArea {
@@ -117,7 +117,7 @@ ContentPage {
                     Layout.fillWidth: true
                     fieldWidth: 250
                     buttonIcon: "video_file"
-                    text: Translation.tr("Video Recording Path")
+                    text: Translation.tr("Recording Save Path")
                     value: Config.options.screenRecord.savePath
                     onValueChanged: {
                         videoRecordPathDebounceTimer.restart();
@@ -133,6 +133,122 @@ ContentPage {
                     }
                 }
 
+                ConfigSelectionArray {
+                    text: Translation.tr("Audio Source")
+                    icon: "volume_up"
+                    currentValue: Config.options.screenRecord.audioSource || "desktop"
+                    onSelected: newValue => {
+                        Config.options.screenRecord.audioSource = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Muted"), value: "none" },
+                        { displayName: Translation.tr("System"), value: "desktop" },
+                        { displayName: Translation.tr("Mic"), value: "mic" },
+                        { displayName: Translation.tr("Both"), value: "both" }
+                    ]
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("Framerate")
+                    icon: "speed"
+                    currentValue: Config.options.screenRecord.fps || 60
+                    onSelected: newValue => {
+                        Config.options.screenRecord.fps = Number(newValue);
+                    }
+                    options: [
+                        { displayName: "30 FPS", value: 30 },
+                        { displayName: "60 FPS", value: 60 },
+                        { displayName: "120 FPS", value: 120 }
+                    ]
+                }
+
+                ConfigComboBox {
+                    text: Translation.tr("Encoder / Hardware Acceleration")
+                    description: Translation.tr("Video encoding backend and hardware acceleration")
+                    buttonIcon: "memory"
+                    fieldWidth: 240
+                    currentValue: Config.options.screenRecord.encoder || "auto"
+                    onSelected: newValue => {
+                        Config.options.screenRecord.encoder = newValue;
+                    }
+                    model: [
+                        { displayName: Translation.tr("Auto (GPU / NVENC)"), value: "auto" },
+                        { displayName: Translation.tr("NVIDIA NVENC (Hardware)"), value: "nvenc" },
+                        { displayName: Translation.tr("VA-API (AMD / Intel)"), value: "vaapi" },
+                        { displayName: Translation.tr("CPU (libx264 Software)"), value: "cpu" }
+                    ]
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("File Format")
+                    icon: "movie"
+                    currentValue: Config.options.screenRecord.format || "mp4"
+                    onSelected: newValue => {
+                        Config.options.screenRecord.format = newValue;
+                    }
+                    options: [
+                        { displayName: "MP4", value: "mp4" },
+                        { displayName: "MKV", value: "mkv" },
+                        { displayName: "WebM", value: "webm" },
+                        { displayName: "GIF", value: "gif" }
+                    ]
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("Video Quality")
+                    icon: "high_quality"
+                    currentValue: Config.options.screenRecord.quality || "high"
+                    onSelected: newValue => {
+                        Config.options.screenRecord.quality = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Low"), value: "low" },
+                        { displayName: Translation.tr("Medium"), value: "medium" },
+                        { displayName: Translation.tr("High"), value: "high" },
+                        { displayName: Translation.tr("Lossless"), value: "lossless" }
+                    ]
+                }
+
+                ConfigSelectionArray {
+                    text: Translation.tr("Countdown Delay")
+                    icon: "timer"
+                    currentValue: Config.options.screenRecord.countdown || 0
+                    onSelected: newValue => {
+                        Config.options.screenRecord.countdown = Number(newValue);
+                    }
+                    options: [
+                        { displayName: Translation.tr("None"), value: 0 },
+                        { displayName: "3s", value: 3 },
+                        { displayName: "5s", value: 5 }
+                    ]
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "mouse"
+                    text: Translation.tr("Record Mouse Cursor")
+                    checked: Config.options.screenRecord.recordCursor
+                    onCheckedChanged: {
+                        Config.options.screenRecord.recordCursor = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "notifications"
+                    text: Translation.tr("Interactive Notification on Complete")
+                    checked: Config.options.screenRecord.notifyOnComplete
+                    onCheckedChanged: {
+                        Config.options.screenRecord.notifyOnComplete = checked;
+                    }
+                }
+            }
+        }
+
+        ContentSection {
+            icon: "file_open"
+            shape: MaterialShape.Shape.Slanted
+            title: Translation.tr("Screenshot Save Path")
+
+            GroupedList {
                 ConfigTextArea {
                     id: screenshotPathField
                     Layout.fillWidth: true

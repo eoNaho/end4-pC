@@ -10,7 +10,7 @@ import qs
 
 /**
  * Screen recording management service.
- * State is driven cleanly by Persistent.states.record.enable,
+ * State is driven cleanly by Persistent.states.record,
  * maintained by scripts/videos/record.sh.
  */
 Singleton {
@@ -18,32 +18,49 @@ Singleton {
 
     readonly property var opts: Config.options.screenRecord
     readonly property bool recording: Persistent.states.record?.enable ?? false
-    property bool recordPaused: false
+    readonly property bool recordPaused: Persistent.states.record?.paused ?? false
+    readonly property double recordStart: (Persistent.states.record?.start ?? 0) > 0
+        ? Persistent.states.record.start / 1000 : 0
 
-    onRecordingChanged: {
-        if (!recording) recordPaused = false
+    function toggleRecordScreen(customArgs = []) {
+        if (root.recording) {
+            root.stopRecord()
+            return
+        }
+        const args = [Directories.recordScriptPath, "--fullscreen", ...customArgs]
+        Quickshell.execDetached(args)
     }
 
-    function toggleRecordScreen() {
-        const args = [Directories.recordScriptPath, "--fullscreen"]
+    function recordRegion(customArgs = []) {
+        if (root.recording) {
+            root.stopRecord()
+            return
+        }
+        const args = [Directories.recordScriptPath, ...customArgs]
+        Quickshell.execDetached(args)
+    }
+
+    function recordGif(fullscreen = false) {
+        if (root.recording) {
+            root.stopRecord()
+            return
+        }
+        const args = [Directories.recordScriptPath, "--gif"]
+        if (fullscreen) args.push("--fullscreen")
         Quickshell.execDetached(args)
     }
 
     function stopRecord() {
-        Quickshell.execDetached([Directories.recordScriptPath])
-        Quickshell.execDetached(["bash", "-c", "pkill -INT wf-recorder 2>/dev/null; pkill -INT gpu-screen-recorder 2>/dev/null"])
-        Persistent.states.record.enable = false
+        Quickshell.execDetached([Directories.recordScriptPath, "--stop"])
+    }
+
+    function discardRecord() {
+        Quickshell.execDetached([Directories.recordScriptPath, "--discard"])
     }
 
     function togglePauseRecord() {
         if (!root.recording) return
-        pauseProc.running = true
-        root.recordPaused = !root.recordPaused
-    }
-    Process {
-        id: pauseProc
-        command: ["bash", "-c",
-            `kill -USR2 "$(cat "\${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/imi-screenrecord.pid" 2>/dev/null)" 2>/dev/null || pkill -USR2 wf-recorder 2>/dev/null`]
+        Quickshell.execDetached([Directories.recordScriptPath, "--pause"])
     }
 
     GlobalShortcut {
@@ -59,18 +76,28 @@ Singleton {
         description: "Pauses/resumes the current recording"
         onPressed: root.togglePauseRecord()
     }
+    GlobalShortcut {
+        name: "screenRecordDiscard"
+        description: "Cancels and deletes the active recording"
+        onPressed: root.discardRecord()
+    }
 
     IpcHandler {
         target: "record"
 
         function toggleScreen(): void { root.toggleRecordScreen() }
+        function recordRegion(): void { root.recordRegion() }
+        function recordGif(): void { root.recordGif() }
         function stop(): void { root.stopRecord() }
         function pause(): void { root.togglePauseRecord() }
+        function discard(): void { root.discardRecord() }
         function status(): string {
             return JSON.stringify({
                 recording: root.recording,
-                paused: root.recordPaused
+                paused: root.recordPaused,
+                start: root.recordStart
             })
         }
     }
 }
+

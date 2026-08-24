@@ -68,7 +68,7 @@ Scope {
 
     function record() {
         if (Persistent.states.record.enable) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
+            ScreenRecord.stopRecord();
             return;
         }
         root.action = RegionSelection.SnipAction.Record
@@ -78,7 +78,7 @@ Scope {
 
     function recordWithSound() {
         if (Persistent.states.record.enable) {
-            Quickshell.execDetached([Directories.recordScriptPath]);
+            ScreenRecord.stopRecord();
             return;
         }
         root.action = RegionSelection.SnipAction.RecordWithSound
