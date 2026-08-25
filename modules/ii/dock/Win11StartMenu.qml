@@ -63,8 +63,29 @@ Scope {
         }
 
         property string searchText: ""
+        property string rawSearchInput: ""
         property bool showAllApps: false
-        property var searchResults: searchText.trim() === "" ? [] : AppSearch.fuzzyQuery(searchText)
+        property var searchResults: {
+            const query = searchText.trim();
+            if (query === "") return [];
+            try {
+                const results = AppSearch.fuzzyQuery(query);
+                if (!results || !Array.isArray(results)) return [];
+                return results.filter(item => item !== null && item !== undefined).slice(0, 15);
+            } catch (err) {
+                console.warn("[Win11StartMenu] Search error:", err);
+                return [];
+            }
+        }
+
+        Timer {
+            id: searchDebounceTimer
+            interval: 50
+            repeat: false
+            onTriggered: {
+                root.searchText = root.rawSearchInput;
+            }
+        }
 
         // KDE Connect integration state
         property bool kdeConnected: false
@@ -130,10 +151,10 @@ Scope {
 
         // Pinned applications (user's configured pinned apps)
         readonly property var pinnedList: {
-            const pinned = Config.options.dock.pinnedApps ?? [];
-            let list = pinned.map(id => DesktopEntries.heuristicLookup(id)).filter(e => e !== null);
+            const pinned = Config.options?.dock?.pinnedApps ?? [];
+            let list = pinned.map(id => DesktopEntries.heuristicLookup(id)).filter(e => e !== null && e !== undefined);
             if (list.length === 0) {
-                list = AppSearch.list.slice(0, 6);
+                list = (AppSearch.list || []).slice(0, 6);
             }
             return list;
         }
@@ -141,7 +162,7 @@ Scope {
         // Dynamic recommended items based on active running windows & favorite apps
         readonly property var recommendedList: {
             let list = [];
-            const running = TaskbarApps.apps.filter(a => a.appId !== "SEPARATOR" && a.toplevels && a.toplevels.length > 0);
+            const running = (TaskbarApps.apps || []).filter(a => a && a.appId !== "SEPARATOR" && a.toplevels && a.toplevels.length > 0);
             for (let i = 0; i < running.length && list.length < 4; i++) {
                 const app = running[i];
                 const desk = DesktopEntries.heuristicLookup(app.appId);
@@ -150,17 +171,25 @@ Scope {
                     list.push({
                         id: app.appId,
                         name: desk.name,
-                        subtitle: (topTitle !== desk.name && topTitle.length > 0) ? topTitle : Translation.tr("Active window"),
+                        subtitle: (topTitle !== desk.name && topTitle && topTitle.length > 0) ? topTitle : Translation.tr("Active window"),
                         icon: desk.icon,
                         execute: () => {
-                            if (app.toplevels.length > 0) app.toplevels[0].activate();
-                            else desk.execute();
+                            try {
+                                if (app.toplevels && app.toplevels.length > 0 && app.toplevels[0]) app.toplevels[0].activate();
+                                else if (desk.runInTerminal && desk.command) {
+                                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(desk.command.join(' '))}'`]);
+                                } else if (typeof desk.execute === "function") {
+                                    desk.execute();
+                                }
+                            } catch (e) {
+                                console.warn("[Win11StartMenu] Execution error:", e);
+                            }
                             GlobalStates.startMenuOpen = false;
                         }
                     });
                 }
             }
-            const pinned = Config.options.dock.pinnedApps ?? [];
+            const pinned = Config.options?.dock?.pinnedApps ?? [];
             for (let i = 0; i < pinned.length && list.length < 4; i++) {
                 const id = pinned[i];
                 if (!list.some(item => item.id === id)) {
@@ -172,7 +201,15 @@ Scope {
                             subtitle: Translation.tr("Quick access"),
                             icon: desk.icon,
                             execute: () => {
-                                desk.execute();
+                                try {
+                                    if (desk.runInTerminal && desk.command) {
+                                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(desk.command.join(' '))}'`]);
+                                    } else if (typeof desk.execute === "function") {
+                                        desk.execute();
+                                    }
+                                } catch (e) {
+                                    console.warn("[Win11StartMenu] Execution error:", e);
+                                }
                                 GlobalStates.startMenuOpen = false;
                             }
                         });
@@ -186,10 +223,14 @@ Scope {
             target: GlobalStates
             function onStartMenuOpenChanged() {
                 if (GlobalStates.startMenuOpen) {
+                    searchDebounceTimer.stop();
+                    root.rawSearchInput = "";
                     root.searchText = "";
-                    searchInput.text = "";
+                    if (searchInput) {
+                        searchInput.text = "";
+                        searchInput.forceActiveFocus();
+                    }
                     root.showAllApps = false;
-                    searchInput.forceActiveFocus();
                     kdeCheckProc.running = true;
                     GlobalFocusGrab.addDismissable(root);
                 } else {
@@ -283,9 +324,16 @@ Scope {
                                     TextInput {
                                         id: searchInput
                                         Layout.fillWidth: true
-                                        text: root.searchText
                                         focus: GlobalStates.startMenuOpen
-                                        onTextChanged: root.searchText = text
+                                        onTextChanged: {
+                                            root.rawSearchInput = text;
+                                            if (text.trim() === "") {
+                                                searchDebounceTimer.stop();
+                                                root.searchText = "";
+                                            } else {
+                                                searchDebounceTimer.restart();
+                                            }
+                                        }
                                         color: Appearance.colors.colOnLayer0
                                         font.pixelSize: Appearance.font.pixelSize.normal
                                         font.family: Appearance.font.family.main
@@ -303,29 +351,48 @@ Scope {
 
                                         Keys.onPressed: (event) => {
                                             if (event.key === Qt.Key_Escape) {
-                                                if (root.searchText !== "") {
+                                                if (searchInput.text !== "") {
+                                                    searchDebounceTimer.stop();
+                                                    root.rawSearchInput = "";
                                                     root.searchText = "";
                                                     searchInput.text = "";
                                                 } else {
                                                     GlobalStates.startMenuOpen = false;
                                                 }
                                             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                                if (root.searchResults.length > 0) {
-                                                    root.searchResults[0].execute();
-                                                    GlobalStates.startMenuOpen = false;
+                                                if (searchDebounceTimer.running) {
+                                                    searchDebounceTimer.stop();
+                                                    root.searchText = root.rawSearchInput;
+                                                }
+                                                if (root.searchResults && root.searchResults.length > 0) {
+                                                    const topApp = root.searchResults[0];
+                                                    if (topApp) {
+                                                        try {
+                                                            if (topApp.runInTerminal && topApp.command) {
+                                                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(topApp.command.join(' '))}'`]);
+                                                            } else if (typeof topApp.execute === "function") {
+                                                                topApp.execute();
+                                                            }
+                                                        } catch (e) {
+                                                            console.warn("[Win11StartMenu] App launch error:", e);
+                                                        }
+                                                        GlobalStates.startMenuOpen = false;
+                                                    }
                                                 }
                                             }
                                         }
                                     }
 
                                     RippleButton {
-                                        visible: root.searchText.length > 0
+                                        visible: searchInput.text.length > 0
                                         implicitWidth: 24
                                         implicitHeight: 24
                                         buttonRadius: Appearance.rounding.full
                                         colBackground: "transparent"
                                         colBackgroundHover: Appearance.colors.colLayer1Hover
                                         onClicked: {
+                                            searchDebounceTimer.stop();
+                                            root.rawSearchInput = "";
                                             root.searchText = "";
                                             searchInput.text = "";
                                             searchInput.forceActiveFocus();
@@ -357,152 +424,164 @@ Scope {
                                 spacing: 14
 
                                 // State 1: SEARCH RESULTS
-                                Loader {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    active: root.searchText.trim() !== ""
-                                    visible: active
-                                    sourceComponent: ColumnLayout {
+                                    visible: root.searchText.trim() !== ""
+                                    spacing: 6
+
+                                    StyledText {
+                                        Layout.leftMargin: 6
+                                        text: Translation.tr("Search Results")
+                                        font.weight: Font.DemiBold
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnLayer1
+                                    }
+
+                                    Repeater {
+                                        model: root.searchResults
+                                        delegate: RippleButton {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 48
+                                            buttonRadius: 8
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (modelData) {
+                                                    try {
+                                                        if (modelData.runInTerminal && modelData.command) {
+                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                        } else if (typeof modelData.execute === "function") {
+                                                            modelData.execute();
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn("[Win11StartMenu] Launch error:", e);
+                                                    }
+                                                    GlobalStates.startMenuOpen = false;
+                                                }
+                                            }
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                spacing: 12
+
+                                                IconImage {
+                                                    source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                    implicitSize: 30
+                                                }
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+                                                    StyledText {
+                                                        Layout.fillWidth: true
+                                                        text: modelData?.name ?? ""
+                                                        font.weight: Font.Medium
+                                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                                        color: Appearance.colors.colOnLayer0
+                                                        elide: Text.ElideRight
+                                                    }
+                                                    StyledText {
+                                                        Layout.fillWidth: true
+                                                        text: (modelData?.comment || modelData?.id) ?? ""
+                                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                                        color: Appearance.colors.colOnLayer1
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    StyledText {
+                                        visible: root.searchResults.length === 0
+                                        Layout.alignment: Qt.AlignHCenter
+                                        Layout.topMargin: 40
+                                        text: Translation.tr("No results found")
+                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                        color: Appearance.colors.colOnLayer1
+                                    }
+                                }
+
+                                // State 2: ALL APPS LIST (when "All apps" is active)
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    visible: root.searchText.trim() === "" && root.showAllApps
+                                    spacing: 6
+
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        spacing: 6
+                                        Layout.leftMargin: 6
+                                        Layout.rightMargin: 6
 
                                         StyledText {
-                                            Layout.leftMargin: 6
-                                            text: Translation.tr("Search Results")
+                                            text: Translation.tr("All Applications")
                                             font.weight: Font.DemiBold
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             color: Appearance.colors.colOnLayer1
                                         }
 
-                                        Repeater {
-                                            model: root.searchResults
-                                            delegate: RippleButton {
-                                                required property var modelData
-                                                Layout.fillWidth: true
-                                                implicitHeight: 48
-                                                buttonRadius: 8
-                                                colBackground: "transparent"
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: {
-                                                    modelData.execute();
-                                                    GlobalStates.startMenuOpen = false;
-                                                }
+                                        Item { Layout.fillWidth: true }
 
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: 12
-                                                    anchors.rightMargin: 12
-                                                    spacing: 12
-
-                                                    IconImage {
-                                                        source: Quickshell.iconPath(modelData.icon, "application-x-executable")
-                                                        implicitSize: 30
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 2
-                                                        StyledText {
-                                                            Layout.fillWidth: true
-                                                            text: modelData.name
-                                                            font.weight: Font.Medium
-                                                            font.pixelSize: Appearance.font.pixelSize.normal
-                                                            color: Appearance.colors.colOnLayer0
-                                                            elide: Text.ElideRight
-                                                        }
-                                                        StyledText {
-                                                            Layout.fillWidth: true
-                                                            text: modelData.comment || modelData.id
-                                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                                            color: Appearance.colors.colOnLayer1
-                                                            elide: Text.ElideRight
-                                                        }
-                                                    }
-                                                }
+                                        RippleButton {
+                                            implicitWidth: 72
+                                            implicitHeight: 26
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.showAllApps = false
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                MaterialSymbol { text: "arrow_back"; iconSize: 14; color: Appearance.colors.colPrimary }
+                                                StyledText { text: Translation.tr("Back"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
                                             }
-                                        }
-
-                                        StyledText {
-                                            visible: root.searchResults.length === 0
-                                            Layout.alignment: Qt.AlignHCenter
-                                            Layout.topMargin: 40
-                                            text: Translation.tr("No results found")
-                                            font.pixelSize: Appearance.font.pixelSize.normal
-                                            color: Appearance.colors.colOnLayer1
                                         }
                                     }
-                                }
 
-                                // State 2: ALL APPS LIST (when "All apps" is active)
-                                Loader {
-                                    Layout.fillWidth: true
-                                    active: root.searchText.trim() === "" && root.showAllApps
-                                    visible: active
-                                    sourceComponent: ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
-
-                                        RowLayout {
+                                    Repeater {
+                                        model: (root.showAllApps && root.searchText.trim() === "") ? AppSearch.list : []
+                                        delegate: RippleButton {
+                                            required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.leftMargin: 6
-                                            Layout.rightMargin: 6
-
-                                            StyledText {
-                                                text: Translation.tr("All Applications")
-                                                font.weight: Font.DemiBold
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                color: Appearance.colors.colOnLayer1
-                                            }
-
-                                            Item { Layout.fillWidth: true }
-
-                                            RippleButton {
-                                                implicitWidth: 72
-                                                implicitHeight: 26
-                                                buttonRadius: 6
-                                                colBackground: Appearance.colors.colLayer1
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: root.showAllApps = false
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-                                                    MaterialSymbol { text: "arrow_back"; iconSize: 14; color: Appearance.colors.colPrimary }
-                                                    StyledText { text: Translation.tr("Back"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
-                                                }
-                                            }
-                                        }
-
-                                        Repeater {
-                                            model: AppSearch.list
-                                            delegate: RippleButton {
-                                                required property var modelData
-                                                Layout.fillWidth: true
-                                                implicitHeight: 40
-                                                buttonRadius: 6
-                                                colBackground: "transparent"
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: {
-                                                    modelData.execute();
+                                            implicitHeight: 40
+                                            buttonRadius: 6
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (modelData) {
+                                                    try {
+                                                        if (modelData.runInTerminal && modelData.command) {
+                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                        } else if (typeof modelData.execute === "function") {
+                                                            modelData.execute();
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn("[Win11StartMenu] Launch error:", e);
+                                                    }
                                                     GlobalStates.startMenuOpen = false;
                                                 }
+                                            }
 
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: 8
-                                                    anchors.rightMargin: 8
-                                                    spacing: 10
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 10
 
-                                                    IconImage {
-                                                        source: Quickshell.iconPath(modelData.icon, "application-x-executable")
-                                                        implicitSize: 24
-                                                    }
+                                                IconImage {
+                                                    source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                    implicitSize: 24
+                                                }
 
-                                                    StyledText {
-                                                        Layout.fillWidth: true
-                                                        text: modelData.name
-                                                        font.pixelSize: Appearance.font.pixelSize.normal
-                                                        color: Appearance.colors.colOnLayer0
-                                                        elide: Text.ElideRight
-                                                    }
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: modelData?.name ?? ""
+                                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                                    color: Appearance.colors.colOnLayer0
+                                                    elide: Text.ElideRight
                                                 }
                                             }
                                         }
@@ -510,238 +589,246 @@ Scope {
                                 }
 
                                 // State 3: DEFAULT (PINNED + RECOMMENDED + CATEGORIES)
-                                Loader {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    active: root.searchText.trim() === "" && !root.showAllApps
-                                    visible: active
-                                    sourceComponent: ColumnLayout {
+                                    visible: root.searchText.trim() === "" && !root.showAllApps
+                                    spacing: 14
+
+                                    // --- Pinned Header ---
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        spacing: 14
+                                        Layout.leftMargin: 6
+                                        Layout.rightMargin: 6
 
-                                        // --- Pinned Header ---
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            Layout.leftMargin: 6
-                                            Layout.rightMargin: 6
+                                        StyledText {
+                                            text: Translation.tr("Pinned")
+                                            font.weight: Font.DemiBold
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            color: Appearance.colors.colOnLayer1
+                                        }
 
-                                            StyledText {
-                                                text: Translation.tr("Pinned")
-                                                font.weight: Font.DemiBold
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                color: Appearance.colors.colOnLayer1
+                                        Item { Layout.fillWidth: true }
+
+                                        RippleButton {
+                                            implicitWidth: 84
+                                            implicitHeight: 26
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.showAllApps = true
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                StyledText {
+                                                    text: Translation.tr("All apps")
+                                                    font.pixelSize: Appearance.font.pixelSize.small
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                                MaterialSymbol {
+                                                    text: "chevron_right"
+                                                    iconSize: 14
+                                                    color: Appearance.colors.colOnLayer1
+                                                }
                                             }
+                                        }
+                                    }
 
-                                            Item { Layout.fillWidth: true }
+                                    // --- Pinned Flow Layout ---
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 8
 
-                                            RippleButton {
-                                                implicitWidth: 84
-                                                implicitHeight: 26
-                                                buttonRadius: 6
-                                                colBackground: Appearance.colors.colLayer1
+                                        Repeater {
+                                            model: root.pinnedList
+
+                                            delegate: RippleButton {
+                                                required property var modelData
+                                                width: 86
+                                                implicitHeight: 76
+                                                buttonRadius: 8
+                                                colBackground: "transparent"
                                                 colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: root.showAllApps = true
-
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 4
-                                                    StyledText {
-                                                        text: Translation.tr("All apps")
-                                                        font.pixelSize: Appearance.font.pixelSize.small
-                                                        color: Appearance.colors.colOnLayer0
+                                                onClicked: {
+                                                    if (modelData) {
+                                                        try {
+                                                            if (modelData.runInTerminal && modelData.command) {
+                                                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                            } else if (typeof modelData.execute === "function") {
+                                                                modelData.execute();
+                                                            }
+                                                        } catch (e) {
+                                                            console.warn("[Win11StartMenu] Launch error:", e);
+                                                        }
+                                                        GlobalStates.startMenuOpen = false;
                                                     }
-                                                    MaterialSymbol {
-                                                        text: "chevron_right"
-                                                        iconSize: 14
-                                                        color: Appearance.colors.colOnLayer1
+                                                }
+
+                                                ColumnLayout {
+                                                    anchors.centerIn: parent
+                                                    spacing: 6
+
+                                                    Item {
+                                                        Layout.alignment: Qt.AlignHCenter
+                                                        width: 36
+                                                        height: 36
+
+                                                        IconImage {
+                                                            anchors.fill: parent
+                                                            source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                            implicitSize: 36
+                                                        }
+                                                    }
+
+                                                    StyledText {
+                                                        Layout.alignment: Qt.AlignHCenter
+                                                        Layout.preferredWidth: 80
+                                                        text: modelData?.name ?? ""
+                                                        font.pixelSize: 11
+                                                        color: Appearance.colors.colOnLayer0
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        elide: Text.ElideRight
                                                     }
                                                 }
                                             }
                                         }
+                                    }
 
-                                        // --- Pinned Flow Layout ---
-                                        Flow {
+                                    // --- Recommended Section ---
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 6
+
+                                        StyledText {
+                                            Layout.leftMargin: 6
+                                            text: Translation.tr("Recommended")
+                                            font.weight: Font.DemiBold
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            color: Appearance.colors.colOnLayer1
+                                        }
+
+                                        GridLayout {
                                             Layout.fillWidth: true
-                                            spacing: 8
+                                            columns: 2
+                                            columnSpacing: 8
+                                            rowSpacing: 4
 
                                             Repeater {
-                                                model: root.pinnedList
-
+                                                model: root.recommendedList
                                                 delegate: RippleButton {
                                                     required property var modelData
-                                                    width: 86
-                                                    implicitHeight: 76
+                                                    Layout.fillWidth: true
+                                                    implicitHeight: 46
                                                     buttonRadius: 8
                                                     colBackground: "transparent"
                                                     colBackgroundHover: Appearance.colors.colLayer1Hover
                                                     onClicked: {
-                                                        modelData.execute();
-                                                        GlobalStates.startMenuOpen = false;
-                                                    }
-
-                                                    ColumnLayout {
-                                                        anchors.centerIn: parent
-                                                        spacing: 6
-
-                                                        Item {
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                            width: 36
-                                                            height: 36
-
-                                                            IconImage {
-                                                                anchors.fill: parent
-                                                                source: Quickshell.iconPath(modelData.icon, "application-x-executable")
-                                                                implicitSize: 36
-                                                            }
-                                                        }
-
-                                                        StyledText {
-                                                            Layout.alignment: Qt.AlignHCenter
-                                                            Layout.preferredWidth: 80
-                                                            text: modelData.name
-                                                            font.pixelSize: 11
-                                                            color: Appearance.colors.colOnLayer0
-                                                            horizontalAlignment: Text.AlignHCenter
-                                                            elide: Text.ElideRight
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // --- Recommended Section ---
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 6
-
-                                            StyledText {
-                                                Layout.leftMargin: 6
-                                                text: Translation.tr("Recommended")
-                                                font.weight: Font.DemiBold
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                color: Appearance.colors.colOnLayer1
-                                            }
-
-                                            GridLayout {
-                                                Layout.fillWidth: true
-                                                columns: 2
-                                                columnSpacing: 8
-                                                rowSpacing: 4
-
-                                                Repeater {
-                                                    model: root.recommendedList
-                                                    delegate: RippleButton {
-                                                        required property var modelData
-                                                        Layout.fillWidth: true
-                                                        implicitHeight: 46
-                                                        buttonRadius: 8
-                                                        colBackground: "transparent"
-                                                        colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                        onClicked: {
+                                                        if (modelData && typeof modelData.execute === "function") {
                                                             modelData.execute();
                                                         }
+                                                    }
 
-                                                        RowLayout {
-                                                            anchors.fill: parent
-                                                            anchors.leftMargin: 10
-                                                            anchors.rightMargin: 10
-                                                            spacing: 10
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 10
+                                                        anchors.rightMargin: 10
+                                                        spacing: 10
 
-                                                            IconImage {
-                                                                source: Quickshell.iconPath(modelData.icon, "application-x-executable")
-                                                                implicitSize: 28
+                                                        IconImage {
+                                                            source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                            implicitSize: 28
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 1
+
+                                                            StyledText {
+                                                                Layout.fillWidth: true
+                                                                text: modelData?.name ?? ""
+                                                                font.weight: Font.Medium
+                                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                                color: Appearance.colors.colOnLayer0
+                                                                elide: Text.ElideRight
                                                             }
 
-                                                            ColumnLayout {
+                                                            StyledText {
                                                                 Layout.fillWidth: true
-                                                                spacing: 1
-
-                                                                StyledText {
-                                                                    Layout.fillWidth: true
-                                                                    text: modelData.name
-                                                                    font.weight: Font.Medium
-                                                                    font.pixelSize: Appearance.font.pixelSize.small
-                                                                    color: Appearance.colors.colOnLayer0
-                                                                    elide: Text.ElideRight
-                                                                }
-
-                                                                StyledText {
-                                                                    Layout.fillWidth: true
-                                                                    text: modelData.subtitle
-                                                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                                                    color: Appearance.colors.colOnLayer1
-                                                                    elide: Text.ElideRight
-                                                                }
+                                                                text: modelData?.subtitle ?? ""
+                                                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                                                color: Appearance.colors.colOnLayer1
+                                                                elide: Text.ElideRight
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+                                    }
 
-                                        // --- Quick Categories ---
-                                        RowLayout {
+                                    // --- Quick Categories ---
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 2
+                                        spacing: 8
+
+                                        // Internet & Web
+                                        RippleButton {
                                             Layout.fillWidth: true
-                                            Layout.topMargin: 2
-                                            spacing: 8
-
-                                            // Internet & Web
-                                            RippleButton {
-                                                Layout.fillWidth: true
-                                                implicitHeight: 38
-                                                buttonRadius: 8
-                                                colBackground: Appearance.colors.colLayer1
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: {
-                                                    searchInput.text = "browser";
-                                                    searchInput.forceActiveFocus();
-                                                }
-
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-                                                    MaterialSymbol { text: "language"; iconSize: 16; color: Appearance.colors.colPrimary }
-                                                    StyledText { text: Translation.tr("Internet"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
-                                                }
+                                            implicitHeight: 38
+                                            buttonRadius: 8
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                searchInput.text = "browser";
+                                                searchInput.forceActiveFocus();
                                             }
 
-                                            // Development
-                                            RippleButton {
-                                                Layout.fillWidth: true
-                                                implicitHeight: 38
-                                                buttonRadius: 8
-                                                colBackground: Appearance.colors.colLayer1
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: {
-                                                    searchInput.text = "terminal";
-                                                    searchInput.forceActiveFocus();
-                                                }
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                MaterialSymbol { text: "language"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                                StyledText { text: Translation.tr("Internet"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
+                                            }
+                                        }
 
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-                                                    MaterialSymbol { text: "terminal"; iconSize: 16; color: Appearance.colors.colSecondary }
-                                                    StyledText { text: Translation.tr("Dev Tools"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
-                                                }
+                                        // Development
+                                        RippleButton {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 38
+                                            buttonRadius: 8
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                searchInput.text = "terminal";
+                                                searchInput.forceActiveFocus();
                                             }
 
-                                            // Media & Games
-                                            RippleButton {
-                                                Layout.fillWidth: true
-                                                implicitHeight: 38
-                                                buttonRadius: 8
-                                                colBackground: Appearance.colors.colLayer1
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                onClicked: {
-                                                    searchInput.text = "media";
-                                                    searchInput.forceActiveFocus();
-                                                }
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                MaterialSymbol { text: "terminal"; iconSize: 16; color: Appearance.colors.colSecondary }
+                                                StyledText { text: Translation.tr("Dev Tools"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
+                                            }
+                                        }
 
-                                                RowLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
-                                                    MaterialSymbol { text: "sports_esports"; iconSize: 16; color: Appearance.colors.colTertiary }
-                                                    StyledText { text: Translation.tr("Media & Games"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
-                                                }
+                                        // Media & Games
+                                        RippleButton {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 38
+                                            buttonRadius: 8
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                searchInput.text = "media";
+                                                searchInput.forceActiveFocus();
+                                            }
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                MaterialSymbol { text: "sports_esports"; iconSize: 16; color: Appearance.colors.colTertiary }
+                                                StyledText { text: Translation.tr("Media & Games"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
                                             }
                                         }
                                     }

@@ -43,38 +43,49 @@ Singleton {
     // Deduped list to fix double icons
     readonly property list<DesktopEntry> list: Array.from(DesktopEntries.applications.values)
         .filter((app, index, self) => 
-            index === self.findIndex((t) => (
-                t.id === app.id
+            app && app.id && index === self.findIndex((t) => (
+                t && t.id === app.id
             ))
     )
     
-    readonly property var preppedNames: list.map(a => ({
+    readonly property var preppedNames: list.filter(a => a && a.name).map(a => ({
         name: Fuzzy.prepare(`${a.name} `),
         entry: a
     }))
 
-    readonly property var preppedIcons: list.map(a => ({
+    readonly property var preppedIcons: list.filter(a => a && a.icon).map(a => ({
         name: Fuzzy.prepare(`${a.icon} `),
         entry: a
     }))
 
     function fuzzyQuery(search: string): var { // Idk why list<DesktopEntry> doesn't work
+        if (!search || typeof search !== "string" || search.trim() === "") return [];
+        const cleanSearch = search.trim();
+
         if (root.sloppySearch) {
-            const results = list.map(obj => ({
+            const results = list.filter(obj => obj && obj.name).map(obj => ({
                 entry: obj,
-                score: Levendist.computeScore(obj.name.toLowerCase(), search.toLowerCase())
+                score: Levendist.computeScore(obj.name.toLowerCase(), cleanSearch.toLowerCase())
             })).filter(item => item.score > root.scoreThreshold)
-                .sort((a, b) => b.score - a.score)
+                .sort((a, b) => b.score - a.score);
             return results
                 .map(item => item.entry)
+                .filter(e => e !== null && e !== undefined);
         }
 
-        return Fuzzy.go(search, preppedNames, {
-            all: true,
-            key: "name"
-        }).map(r => {
-            return r.obj.entry
-        });
+        try {
+            const results = Fuzzy.go(cleanSearch, preppedNames, {
+                all: true,
+                key: "name"
+            });
+            if (!results) return [];
+            return results
+                .map(r => (r && r.obj) ? r.obj.entry : null)
+                .filter(e => e !== null && e !== undefined);
+        } catch (err) {
+            console.warn("[AppSearch] fuzzyQuery error:", err);
+            return [];
+        }
     }
 
     function iconExists(iconName) {
@@ -88,7 +99,13 @@ Singleton {
     }
 
     function getUndescoreToKebabAppName(str) {
+        if (!str) return "";
         return str.toLowerCase().replace(/_/g, "-");
+    }
+
+    function getKebabNormalizedAppName(str) {
+        if (!str) return "";
+        return str.toLowerCase().replace(/[^a-z0-9]/g, "-");
     }
 
     property var _iconCache: new Map()
@@ -145,22 +162,24 @@ Singleton {
         if (iconExists(undescoreToKebabGuess)) return undescoreToKebabGuess;
 
         // Search in desktop entries
-        const iconSearchResults = Fuzzy.go(str, preppedIcons, {
-            all: true,
-            key: "name"
-        }).map(r => {
-            return r.obj.entry
-        });
-        if (iconSearchResults.length > 0) {
-            const guess = iconSearchResults[0].icon
-            if (iconExists(guess)) return guess;
-        }
+        try {
+            const iconSearchResults = Fuzzy.go(str, preppedIcons, {
+                all: true,
+                key: "name"
+            });
+            if (iconSearchResults && iconSearchResults.length > 0 && iconSearchResults[0]?.obj?.entry?.icon) {
+                const guess = iconSearchResults[0].obj.entry.icon;
+                if (iconExists(guess)) return guess;
+            }
+        } catch (e) {}
 
-        const nameSearchResults = root.fuzzyQuery(str);
-        if (nameSearchResults.length > 0) {
-            const guess = nameSearchResults[0].icon
-            if (iconExists(guess)) return guess;
-        }
+        try {
+            const nameSearchResults = root.fuzzyQuery(str);
+            if (nameSearchResults && nameSearchResults.length > 0 && nameSearchResults[0]?.icon) {
+                const guess = nameSearchResults[0].icon;
+                if (iconExists(guess)) return guess;
+            }
+        } catch (e) {}
 
         // Quickshell's desktop entry lookup
         const heuristicEntry = DesktopEntries.heuristicLookup(str);
