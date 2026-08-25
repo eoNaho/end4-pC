@@ -265,10 +265,10 @@ PopupWindow {
                                 Layout.fillWidth: true
                                 implicitHeight: 30
                                 buttonRadius: Appearance.rounding.small
-                                colBackground: modelData.activated ? Appearance.colors.colPrimaryContainer : "transparent"
+                                colBackground: (modelData?.activated ?? false) ? Appearance.colors.colPrimaryContainer : "transparent"
                                 colBackgroundHover: Appearance.colors.colLayer1Hover
                                 onClicked: {
-                                    modelData.activate();
+                                    if (modelData?.activate) modelData.activate();
                                     root.active = false;
                                     root.closeRequested();
                                 }
@@ -280,17 +280,17 @@ PopupWindow {
                                     spacing: 4
 
                                     MaterialSymbol {
-                                        text: modelData.activated ? "radio_button_checked" : "radio_button_unchecked"
+                                        text: (modelData?.activated ?? false) ? "radio_button_checked" : "radio_button_unchecked"
                                         iconSize: 16
-                                        color: modelData.activated ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                                        color: (modelData?.activated ?? false) ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                                     }
 
                                     StyledText {
                                         Layout.fillWidth: true
-                                        text: modelData.title.length > 0 ? modelData.title : `${root.appId} (${index + 1})`
+                                        text: (modelData?.title && modelData.title.length > 0) ? modelData.title : `${root.appId} (${index + 1})`
                                         elide: Text.ElideRight
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        color: modelData.activated ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer0
+                                        color: (modelData?.activated ?? false) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer0
                                     }
 
                                     RippleButton {
@@ -300,13 +300,13 @@ PopupWindow {
                                         colBackground: "transparent"
                                         colBackgroundHover: Appearance.colors.colErrorContainer
                                         onClicked: {
-                                            modelData.close();
+                                            if (modelData?.close) modelData.close();
                                         }
                                         MaterialSymbol {
                                             anchors.centerIn: parent
                                              text: "close"
-                                            iconSize: 14
-                                            color: parent.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer1
+                                             iconSize: 14
+                                             color: parent.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer1
                                         }
                                         StyledToolTip { text: Translation.tr("Close Window") }
                                     }

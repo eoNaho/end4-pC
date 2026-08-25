@@ -64,7 +64,26 @@ Scope {
 
         property string searchText: ""
         property string rawSearchInput: ""
+        property int searchSelectedIndex: 0
+        property bool powerFlyoutOpen: false
         property bool showAllApps: false
+        property var contextMenuTargetApp: null
+        property point contextMenuPos: Qt.point(0, 0)
+        property bool appContextMenuOpen: false
+
+        function isAppPinned(app) {
+            if (!app) return false;
+            const id = app.id ?? app.appId ?? "";
+            return (Config.options?.dock?.pinnedApps ?? []).includes(id);
+        }
+
+        function togglePinApp(app) {
+            if (!app) return;
+            const id = app.id ?? app.appId ?? "";
+            if (id) {
+                TaskbarApps.togglePin(id);
+            }
+        }
         property var searchResults: {
             const query = searchText.trim();
             if (query === "") return [];
@@ -226,6 +245,10 @@ Scope {
                     searchDebounceTimer.stop();
                     root.rawSearchInput = "";
                     root.searchText = "";
+                    root.searchSelectedIndex = 0;
+                    root.powerFlyoutOpen = false;
+                    root.appContextMenuOpen = false;
+                    root.contextMenuTargetApp = null;
                     if (searchInput) {
                         searchInput.text = "";
                         searchInput.forceActiveFocus();
@@ -234,6 +257,9 @@ Scope {
                     kdeCheckProc.running = true;
                     GlobalFocusGrab.addDismissable(root);
                 } else {
+                    root.powerFlyoutOpen = false;
+                    root.appContextMenuOpen = false;
+                    root.contextMenuTargetApp = null;
                     GlobalFocusGrab.dismiss();
                 }
             }
@@ -254,6 +280,24 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Appearance.sizes.hyprlandGapsOut + 75
             anchors.horizontalCenter: parent.horizontalCenter
+            transformOrigin: Item.Bottom
+
+            scale: GlobalStates.startMenuOpen ? 1.0 : 0.96
+            opacity: GlobalStates.startMenuOpen ? 1.0 : 0.0
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 160
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 160
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             RowLayout {
                 id: mainRow
@@ -326,6 +370,7 @@ Scope {
                                         Layout.fillWidth: true
                                         focus: GlobalStates.startMenuOpen
                                         onTextChanged: {
+                                            root.searchSelectedIndex = 0;
                                             root.rawSearchInput = text;
                                             if (text.trim() === "") {
                                                 searchDebounceTimer.stop();
@@ -351,21 +396,42 @@ Scope {
 
                                         Keys.onPressed: (event) => {
                                             if (event.key === Qt.Key_Escape) {
-                                                if (searchInput.text !== "") {
+                                                if (root.appContextMenuOpen) {
+                                                    root.appContextMenuOpen = false;
+                                                    root.contextMenuTargetApp = null;
+                                                    event.accepted = true;
+                                                } else if (root.powerFlyoutOpen) {
+                                                    root.powerFlyoutOpen = false;
+                                                    event.accepted = true;
+                                                } else if (searchInput.text !== "") {
                                                     searchDebounceTimer.stop();
                                                     root.rawSearchInput = "";
                                                     root.searchText = "";
                                                     searchInput.text = "";
+                                                    root.searchSelectedIndex = 0;
+                                                    event.accepted = true;
                                                 } else {
                                                     GlobalStates.startMenuOpen = false;
+                                                    event.accepted = true;
+                                                }
+                                            } else if (event.key === Qt.Key_Down) {
+                                                if (root.searchResults.length > 0) {
+                                                    root.searchSelectedIndex = Math.min(root.searchSelectedIndex + 1, root.searchResults.length - 1);
+                                                    event.accepted = true;
+                                                }
+                                            } else if (event.key === Qt.Key_Up) {
+                                                if (root.searchResults.length > 0) {
+                                                    root.searchSelectedIndex = Math.max(root.searchSelectedIndex - 1, 0);
+                                                    event.accepted = true;
                                                 }
                                             } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                                 if (searchDebounceTimer.running) {
                                                     searchDebounceTimer.stop();
                                                     root.searchText = root.rawSearchInput;
                                                 }
-                                                if (root.searchResults && root.searchResults.length > 0) {
-                                                    const topApp = root.searchResults[0];
+                                                const idx = (root.searchSelectedIndex >= 0 && root.searchSelectedIndex < root.searchResults.length) ? root.searchSelectedIndex : 0;
+                                                if (root.searchResults && root.searchResults.length > idx) {
+                                                    const topApp = root.searchResults[idx];
                                                     if (topApp) {
                                                         try {
                                                             if (topApp.runInTerminal && topApp.command) {
@@ -379,6 +445,7 @@ Scope {
                                                         GlobalStates.startMenuOpen = false;
                                                     }
                                                 }
+                                                event.accepted = true;
                                             }
                                         }
                                     }
@@ -394,6 +461,7 @@ Scope {
                                             searchDebounceTimer.stop();
                                             root.rawSearchInput = "";
                                             root.searchText = "";
+                                            root.searchSelectedIndex = 0;
                                             searchInput.text = "";
                                             searchInput.forceActiveFocus();
                                         }
@@ -440,17 +508,29 @@ Scope {
                                     Repeater {
                                         model: root.searchResults
                                         delegate: RippleButton {
+                                            id: searchResultBtn
                                             required property var modelData
+                                            required property int index
                                             Layout.fillWidth: true
                                             implicitHeight: 48
                                             buttonRadius: 8
-                                            colBackground: "transparent"
+                                            colBackground: (index === root.searchSelectedIndex) ? Appearance.colors.colLayer1Hover : "transparent"
                                             colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onHoveredChanged: {
+                                                if (hovered) root.searchSelectedIndex = index;
+                                            }
+                                            altAction: (event) => {
+                                                root.contextMenuTargetApp = modelData;
+                                                const p = mapToItem(startMenuCard, event.x, event.y);
+                                                root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                root.appContextMenuOpen = true;
+                                                root.powerFlyoutOpen = false;
+                                            }
                                             onClicked: {
                                                 if (modelData) {
                                                     try {
                                                         if (modelData.runInTerminal && modelData.command) {
-                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                             Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
                                                         } else if (typeof modelData.execute === "function") {
                                                             modelData.execute();
                                                         }
@@ -461,10 +541,21 @@ Scope {
                                                 }
                                             }
 
+                                            Rectangle {
+                                                anchors.left: parent.left
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                anchors.leftMargin: 2
+                                                width: 3
+                                                height: 20
+                                                radius: 1.5
+                                                color: Appearance.colors.colPrimary
+                                                visible: index === root.searchSelectedIndex
+                                            }
+
                                             RowLayout {
                                                 anchors.fill: parent
                                                 anchors.leftMargin: 12
-                                                anchors.rightMargin: 12
+                                                anchors.rightMargin: 8
                                                 spacing: 12
 
                                                 IconImage {
@@ -489,6 +580,27 @@ Scope {
                                                         font.pixelSize: Appearance.font.pixelSize.smaller
                                                         color: Appearance.colors.colOnLayer1
                                                         elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                RippleButton {
+                                                    visible: searchResultBtn.hovered || root.isAppPinned(modelData)
+                                                    implicitWidth: 30
+                                                    implicitHeight: 30
+                                                    buttonRadius: Appearance.rounding.full
+                                                    colBackground: "transparent"
+                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    onClicked: {
+                                                        root.togglePinApp(modelData);
+                                                    }
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        text: root.isAppPinned(modelData) ? "keep" : "keep_public"
+                                                        iconSize: 18
+                                                        color: root.isAppPinned(modelData) ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                                                    }
+                                                    StyledToolTip {
+                                                        text: root.isAppPinned(modelData) ? Translation.tr("Unpin from Start") : Translation.tr("Pin to Start")
                                                     }
                                                 }
                                             }
@@ -544,12 +656,20 @@ Scope {
                                     Repeater {
                                         model: (root.showAllApps && root.searchText.trim() === "") ? AppSearch.list : []
                                         delegate: RippleButton {
+                                            id: allAppsBtn
                                             required property var modelData
                                             Layout.fillWidth: true
                                             implicitHeight: 40
                                             buttonRadius: 6
                                             colBackground: "transparent"
                                             colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            altAction: (event) => {
+                                                root.contextMenuTargetApp = modelData;
+                                                const p = mapToItem(startMenuCard, event.x, event.y);
+                                                root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                root.appContextMenuOpen = true;
+                                                root.powerFlyoutOpen = false;
+                                            }
                                             onClicked: {
                                                 if (modelData) {
                                                     try {
@@ -582,6 +702,27 @@ Scope {
                                                     font.pixelSize: Appearance.font.pixelSize.normal
                                                     color: Appearance.colors.colOnLayer0
                                                     elide: Text.ElideRight
+                                                }
+
+                                                RippleButton {
+                                                    visible: allAppsBtn.hovered || root.isAppPinned(modelData)
+                                                    implicitWidth: 28
+                                                    implicitHeight: 28
+                                                    buttonRadius: Appearance.rounding.full
+                                                    colBackground: "transparent"
+                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    onClicked: {
+                                                        root.togglePinApp(modelData);
+                                                    }
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        text: root.isAppPinned(modelData) ? "keep" : "keep_public"
+                                                        iconSize: 16
+                                                        color: root.isAppPinned(modelData) ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                                                    }
+                                                    StyledToolTip {
+                                                        text: root.isAppPinned(modelData) ? Translation.tr("Unpin from Start") : Translation.tr("Pin to Start")
+                                                    }
                                                 }
                                             }
                                         }
@@ -649,6 +790,13 @@ Scope {
                                                 buttonRadius: 8
                                                 colBackground: "transparent"
                                                 colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                altAction: (event) => {
+                                                    root.contextMenuTargetApp = modelData;
+                                                    const p = mapToItem(startMenuCard, event.x, event.y);
+                                                    root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                    root.appContextMenuOpen = true;
+                                                    root.powerFlyoutOpen = false;
+                                                }
                                                 onClicked: {
                                                     if (modelData) {
                                                         try {
@@ -722,6 +870,13 @@ Scope {
                                                     buttonRadius: 8
                                                     colBackground: "transparent"
                                                     colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    altAction: (event) => {
+                                                        root.contextMenuTargetApp = modelData;
+                                                        const p = mapToItem(startMenuCard, event.x, event.y);
+                                                        root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                        root.appContextMenuOpen = true;
+                                                        root.powerFlyoutOpen = false;
+                                                    }
                                                     onClicked: {
                                                         if (modelData && typeof modelData.execute === "function") {
                                                             modelData.execute();
@@ -838,6 +993,7 @@ Scope {
 
                         // ---------------- Footer (Profile & Power) ----------------
                         Rectangle {
+                            id: footerBar
                             Layout.fillWidth: true
                             implicitHeight: 56
                             color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
@@ -922,24 +1078,324 @@ Scope {
 
                                 // Power Button
                                 RippleButton {
+                                    id: powerButton
                                     implicitWidth: 38
                                     implicitHeight: 38
                                     buttonRadius: 8
-                                    colBackground: "transparent"
+                                    colBackground: root.powerFlyoutOpen ? Appearance.colors.colLayer1Hover : "transparent"
                                     colBackgroundHover: Appearance.colors.colErrorContainer
                                     onClicked: {
-                                        GlobalStates.sessionOpen = !GlobalStates.sessionOpen;
-                                        GlobalStates.startMenuOpen = false;
+                                        root.powerFlyoutOpen = !root.powerFlyoutOpen;
                                     }
 
                                     MaterialSymbol {
                                         anchors.centerIn: parent
                                         text: "power_settings_new"
                                         iconSize: 20
-                                        color: parent.hovered ? Appearance.colors.colError : Appearance.colors.colOnLayer0
+                                        color: (parent.hovered || root.powerFlyoutOpen) ? Appearance.colors.colError : Appearance.colors.colOnLayer0
                                     }
 
                                     StyledToolTip { text: Translation.tr("Power / Session Menu") }
+                                }
+                            }
+                        }
+                    }
+
+                    // Dismiss overlay for power flyout & context menu
+                    MouseArea {
+                        anchors.fill: parent
+                        visible: root.powerFlyoutOpen || root.appContextMenuOpen
+                        z: 95
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onPressed: {
+                            root.powerFlyoutOpen = false;
+                            root.appContextMenuOpen = false;
+                            root.contextMenuTargetApp = null;
+                        }
+                    }
+
+                    // Power Flyout Popup Menu
+                    Rectangle {
+                        id: powerFlyout
+                        visible: root.powerFlyoutOpen
+                        z: 100
+                        anchors.right: parent.right
+                        anchors.rightMargin: 16
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 64
+                        width: 190
+                        height: powerFlyoutCol.implicitHeight + 16
+                        radius: Appearance.rounding.normal
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.8)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow {
+                            target: powerFlyout
+                        }
+
+                        ColumnLayout {
+                            id: powerFlyoutCol
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 2
+
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.powerFlyoutOpen = false;
+                                    GlobalStates.startMenuOpen = false;
+                                    Session.lock();
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+                                    MaterialSymbol { text: "lock"; iconSize: 16; color: Appearance.colors.colOnLayer0 }
+                                    StyledText { text: Translation.tr("Lock"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.powerFlyoutOpen = false;
+                                    GlobalStates.startMenuOpen = false;
+                                    Session.suspend();
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+                                    MaterialSymbol { text: "bedtime"; iconSize: 16; color: Appearance.colors.colOnLayer0 }
+                                    StyledText { text: Translation.tr("Sleep"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.powerFlyoutOpen = false;
+                                    GlobalStates.startMenuOpen = false;
+                                    Session.reboot();
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+                                    MaterialSymbol { text: "restart_alt"; iconSize: 16; color: Appearance.colors.colOnLayer0 }
+                                    StyledText { text: Translation.tr("Restart"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colErrorContainer
+                                onClicked: {
+                                    root.powerFlyoutOpen = false;
+                                    GlobalStates.startMenuOpen = false;
+                                    Session.poweroff();
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+                                    MaterialSymbol { text: "power_settings_new"; iconSize: 16; color: Appearance.colors.colError }
+                                    StyledText { text: Translation.tr("Shut down"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colError }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Appearance.colors.colLayer0Border
+                            }
+
+                                    RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.powerFlyoutOpen = false;
+                                    GlobalStates.startMenuOpen = false;
+                                    Session.logout();
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+                                    MaterialSymbol { text: "logout"; iconSize: 16; color: Appearance.colors.colOnLayer1 }
+                                    StyledText { text: Translation.tr("Sign out"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+                        }
+                    }
+
+                    // App Context Menu (Right-click on any app)
+                    Rectangle {
+                        id: appContextMenu
+                        visible: root.appContextMenuOpen && root.contextMenuTargetApp !== null
+                        z: 200
+                        x: Math.max(8, Math.min(root.contextMenuPos.x, startMenuCard.width - 220))
+                        y: Math.max(8, Math.min(root.contextMenuPos.y, startMenuCard.height - 180))
+                        width: 210
+                        height: appContextMenuCol.implicitHeight + 16
+                        radius: Appearance.rounding.normal
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.85)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow {
+                            target: appContextMenu
+                        }
+
+                        ColumnLayout {
+                            id: appContextMenuCol
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 2
+
+                            // Header: App Icon & Name
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 4
+                                Layout.rightMargin: 4
+                                Layout.topMargin: 2
+                                Layout.bottomMargin: 4
+                                spacing: 8
+
+                                IconImage {
+                                    source: Quickshell.iconPath(root.contextMenuTargetApp?.icon ?? "", "application-x-executable")
+                                    implicitSize: 20
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: root.contextMenuTargetApp?.name ?? ""
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnLayer0
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Appearance.colors.colLayer0Border
+                            }
+
+                            // Action: Open / Run
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const app = root.contextMenuTargetApp;
+                                    root.appContextMenuOpen = false;
+                                    if (app) {
+                                        try {
+                                            if (app.runInTerminal && app.command) {
+                                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(' '))}'`]);
+                                            } else if (typeof app.execute === "function") {
+                                                app.execute();
+                                            }
+                                        } catch (e) {
+                                            console.warn("[Win11StartMenu] Launch error:", e);
+                                        }
+                                        GlobalStates.startMenuOpen = false;
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "play_arrow"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Open"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            // Action: Pin / Unpin from Start
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.togglePinApp(root.contextMenuTargetApp);
+                                    root.appContextMenuOpen = false;
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol {
+                                        text: root.isAppPinned(root.contextMenuTargetApp) ? "keep_off" : "keep"
+                                        iconSize: 16
+                                        color: Appearance.colors.colSecondary
+                                    }
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: root.isAppPinned(root.contextMenuTargetApp) ? Translation.tr("Unpin from Start") : Translation.tr("Pin to Start")
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnLayer0
+                                    }
+                                }
+                            }
+
+                            // Action: Run in Terminal
+                            RippleButton {
+                                visible: root.contextMenuTargetApp?.command !== undefined || root.contextMenuTargetApp?.exec !== undefined
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const app = root.contextMenuTargetApp;
+                                    root.appContextMenuOpen = false;
+                                    if (app) {
+                                        const cmd = app.command ? app.command.join(' ') : (app.exec || app.id);
+                                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(cmd)}'`]);
+                                        GlobalStates.startMenuOpen = false;
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "terminal"; iconSize: 16; color: Appearance.colors.colTertiary }
+                                    StyledText { text: Translation.tr("Run in Terminal"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
                                 }
                             }
                         }
@@ -1167,7 +1623,7 @@ Scope {
                                 spacing: 4
 
                                 Repeater {
-                                    model: root.phoneNotifications.length > 0 ? root.phoneNotifications : Notifications.list.filter(n => (n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect")))).slice(0, 4)
+                                    model: root.phoneNotifications.length > 0 ? root.phoneNotifications : (Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).slice(0, 4)
                                     delegate: RippleButton {
                                         required property var modelData
                                         Layout.fillWidth: true
@@ -1202,7 +1658,7 @@ Scope {
 
                                                 StyledText {
                                                     Layout.fillWidth: true
-                                                    text: modelData.title || modelData.summary || modelData.appName || Translation.tr("Phone Alert")
+                                                    text: modelData?.title || modelData?.summary || modelData?.appName || Translation.tr("Phone Alert")
                                                     font.weight: Font.Medium
                                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                                     color: Appearance.colors.colOnLayer0
@@ -1211,7 +1667,7 @@ Scope {
 
                                                 StyledText {
                                                     Layout.fillWidth: true
-                                                    text: modelData.body || modelData.app || Translation.tr("Notification")
+                                                    text: modelData?.body || modelData?.app || Translation.tr("Notification")
                                                     font.pixelSize: Appearance.font.pixelSize.smallest
                                                     color: Appearance.colors.colOnLayer1
                                                     elide: Text.ElideRight
@@ -1222,7 +1678,7 @@ Scope {
                                 }
 
                                 StyledText {
-                                    visible: (root.phoneNotifications.length === 0) && (Notifications.list.filter(n => (n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect")))).length === 0)
+                                    visible: (root.phoneNotifications.length === 0) && ((Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).length === 0)
                                     Layout.alignment: Qt.AlignHCenter
                                     Layout.topMargin: 20
                                     text: root.kdeConnected ? Translation.tr("No phone notifications") : Translation.tr("Connect phone via KDE Connect")

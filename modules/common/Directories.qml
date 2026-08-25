@@ -67,5 +67,7 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`])
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`])
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`])
+        Quickshell.execDetached(["bash", "-c", `mkdir -p '${Directories.state}/user/generated/wallpaper' && [ ! -f '${Directories.generatedWallpaperCategoryPath}' ] && echo 'minimalist' > '${Directories.generatedWallpaperCategoryPath}'`])
+        Quickshell.execDetached(["bash", "-c", `mkdir -p '${Directories.state}/user' && [ ! -f '${Directories.state}/user/calendar_events.json' ] && echo '[]' > '${Directories.state}/user/calendar_events.json'`])
     }
 }
