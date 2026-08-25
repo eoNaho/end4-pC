@@ -1591,6 +1591,27 @@ Scope {
                             color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
                             border.width: 1
                             border.color: Appearance.colors.colLayer0Border
+                            radius: startMenuCard.radius
+
+                            // Square off the top corners, keeping only the
+                            // bottom two rounded to match startMenuCard's clip
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: parent.radius
+                                color: parent.color
+                            }
+
+                            // Re-draw the top border since the mask above
+                            // covers it
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: parent.border.width
+                                color: parent.border.color
+                            }
 
                             RowLayout {
                                 anchors.fill: parent
@@ -2838,11 +2859,33 @@ Scope {
 
                         // Bottom Footer: KDE Connect App button
                         Rectangle {
+                            id: companionFooterBar
                             Layout.fillWidth: true
                             implicitHeight: 56
                             color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
                             border.width: 1
                             border.color: Appearance.colors.colLayer0Border
+                            radius: companionCard.radius
+
+                            // Square off the top corners, keeping only the
+                            // bottom two rounded to match companionCard's clip
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: parent.radius
+                                color: parent.color
+                            }
+
+                            // Re-draw the top border since the mask above
+                            // covers it
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                height: parent.border.width
+                                color: parent.border.color
+                            }
 
                             RowLayout {
                                 anchors.fill: parent
