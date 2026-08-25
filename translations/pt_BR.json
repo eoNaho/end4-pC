@@ -1052,8 +1052,17 @@
     "Both": "Ambos",
     "Sem Perdas": "Sem Perdas",
     "Video encoding backend and hardware acceleration": "Codificador e aceleração por hardware",
-    "Auto (GPU / NVENC)": "Automático (GPU / NVENC)",
-    "NVIDIA NVENC (Hardware)": "NVIDIA NVENC (Hardware)",
-    "VA-API (AMD / Intel)": "VA-API (AMD / Intel)",
-    "CPU (libx264 Software)": "CPU (libx264 Software)"
+    "CPU (libx264 Software)": "CPU (libx264 Software)",
+    "New folder": "Nova pasta",
+    "New Folder": "Nova Pasta",
+    "Add to folder": "Adicionar à pasta",
+    "Add to Folder": "Adicionar à Pasta",
+    "Delete Folder": "Excluir Pasta",
+    "Add App to Folder": "Adicionar App à Pasta",
+    "Remove from Folder": "Remover da Pasta",
+    "Folder is empty. Click '+' to add applications.": "A pasta está vazia. Clique em '+' para adicionar aplicativos.",
+    "Folder name...": "Nome da pasta...",
+    "Add Application": "Adicionar Aplicativo",
+    "Search apps...": "Pesquisar aplicativos...",
+    "Create New Folder": "Criar Nova Pasta"
 }

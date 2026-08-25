@@ -70,6 +70,19 @@ Scope {
         property var contextMenuTargetApp: null
         property point contextMenuPos: Qt.point(0, 0)
         property bool appContextMenuOpen: false
+        property var activeFolder: null
+        property bool folderModalOpen: false
+        property bool newFolderDialogOpen: false
+        property string newFolderNameInput: ""
+        property bool folderPickerOpen: false
+        property var folderPickerTargetApp: null
+        property bool addAppToFolderDialogOpen: false
+        property string addAppSearchQuery: ""
+        property var draggingApp: null
+        property point dragCurrentPos: Qt.point(0, 0)
+        property bool isDraggingApp: false
+        property var dragDropTargetFolder: null
+        property var dragDropTargetApp: null
 
         function isAppPinned(app) {
             if (!app) return false;
@@ -249,6 +262,12 @@ Scope {
                     root.powerFlyoutOpen = false;
                     root.appContextMenuOpen = false;
                     root.contextMenuTargetApp = null;
+                    root.folderModalOpen = false;
+                    root.activeFolder = null;
+                    root.newFolderDialogOpen = false;
+                    root.folderPickerOpen = false;
+                    root.folderPickerTargetApp = null;
+                    root.addAppToFolderDialogOpen = false;
                     if (searchInput) {
                         searchInput.text = "";
                         searchInput.forceActiveFocus();
@@ -260,6 +279,12 @@ Scope {
                     root.powerFlyoutOpen = false;
                     root.appContextMenuOpen = false;
                     root.contextMenuTargetApp = null;
+                    root.folderModalOpen = false;
+                    root.activeFolder = null;
+                    root.newFolderDialogOpen = false;
+                    root.folderPickerOpen = false;
+                    root.folderPickerTargetApp = null;
+                    root.addAppToFolderDialogOpen = false;
                     GlobalFocusGrab.dismiss();
                 }
             }
@@ -396,9 +421,21 @@ Scope {
 
                                         Keys.onPressed: (event) => {
                                             if (event.key === Qt.Key_Escape) {
-                                                if (root.appContextMenuOpen) {
+                                                if (root.addAppToFolderDialogOpen) {
+                                                    root.addAppToFolderDialogOpen = false;
+                                                    event.accepted = true;
+                                                } else if (root.folderPickerOpen) {
+                                                    root.folderPickerOpen = false;
+                                                    event.accepted = true;
+                                                } else if (root.newFolderDialogOpen) {
+                                                    root.newFolderDialogOpen = false;
+                                                    event.accepted = true;
+                                                } else if (root.appContextMenuOpen) {
                                                     root.appContextMenuOpen = false;
                                                     root.contextMenuTargetApp = null;
+                                                    event.accepted = true;
+                                                } else if (root.folderModalOpen) {
+                                                    root.folderModalOpen = false;
                                                     event.accepted = true;
                                                 } else if (root.powerFlyoutOpen) {
                                                     root.powerFlyoutOpen = false;
@@ -729,10 +766,281 @@ Scope {
                                     }
                                 }
 
-                                // State 3: DEFAULT (PINNED + RECOMMENDED + CATEGORIES)
+                                // State 3: FOLDER VIEW (When a folder is opened in Windows 11 style)
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    visible: root.searchText.trim() === "" && !root.showAllApps
+                                    visible: root.searchText.trim() === "" && !root.showAllApps && root.folderModalOpen && root.activeFolder !== null
+                                    spacing: 14
+
+                                    // Folder Header Bar (Back button, Editable Name, Add App, Delete Folder)
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.leftMargin: 4
+                                        Layout.rightMargin: 4
+                                        spacing: 8
+
+                                        RippleButton {
+                                            implicitWidth: 34
+                                            implicitHeight: 34
+                                            buttonRadius: Appearance.rounding.full
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                root.folderModalOpen = false;
+                                            }
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "arrow_back"
+                                                iconSize: 18
+                                                color: Appearance.colors.colOnLayer0
+                                            }
+                                            StyledToolTip { text: Translation.tr("Back") }
+                                        }
+
+                                        // Editable Folder Name Input
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 34
+                                            radius: 6
+                                            color: folderNameInput.activeFocus ? Appearance.colors.colLayer1 : "transparent"
+                                            border.width: folderNameInput.activeFocus ? 1 : 0
+                                            border.color: Appearance.colors.colPrimary
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 8
+
+                                                MaterialSymbol {
+                                                    text: "folder"
+                                                    iconSize: 20
+                                                    color: Appearance.colors.colPrimary
+                                                }
+
+                                                TextInput {
+                                                    id: folderNameInput
+                                                    Layout.fillWidth: true
+                                                    text: root.activeFolder?.name ?? ""
+                                                    font.weight: Font.DemiBold
+                                                    font.pixelSize: Appearance.font.pixelSize.large
+                                                    color: Appearance.colors.colOnLayer0
+                                                    font.family: Appearance.font.family.main
+                                                    verticalAlignment: TextInput.AlignVCenter
+                                                    selectByMouse: true
+                                                    onEditingFinished: {
+                                                        if (root.activeFolder && text.trim() !== "") {
+                                                            StartMenuFolders.renameFolder(root.activeFolder.id, text.trim());
+                                                            root.activeFolder = StartMenuFolders.getFolder(root.activeFolder.id);
+                                                        }
+                                                    }
+                                                }
+
+                                                MaterialSymbol {
+                                                    text: "edit"
+                                                    iconSize: 14
+                                                    color: Appearance.colors.colOnLayer1
+                                                    visible: !folderNameInput.activeFocus
+                                                }
+                                            }
+                                        }
+
+                                        // Add App to Folder Button
+                                        RippleButton {
+                                            implicitWidth: 34
+                                            implicitHeight: 34
+                                            buttonRadius: Appearance.rounding.full
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                root.addAppSearchQuery = "";
+                                                root.addAppToFolderDialogOpen = true;
+                                            }
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "add"
+                                                iconSize: 18
+                                                color: Appearance.colors.colPrimary
+                                            }
+                                            StyledToolTip { text: Translation.tr("Add App to Folder") }
+                                        }
+
+                                        // Delete Folder Button
+                                        RippleButton {
+                                            implicitWidth: 34
+                                            implicitHeight: 34
+                                            buttonRadius: Appearance.rounding.full
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colErrorContainer
+                                            onClicked: {
+                                                if (root.activeFolder) {
+                                                    StartMenuFolders.deleteFolder(root.activeFolder.id);
+                                                    root.activeFolder = null;
+                                                    root.folderModalOpen = false;
+                                                }
+                                            }
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "delete"
+                                                iconSize: 18
+                                                color: Appearance.colors.colError
+                                            }
+                                            StyledToolTip { text: Translation.tr("Delete Folder") }
+                                        }
+                                    }
+
+                                    // Apps inside folder Flow
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        visible: (StartMenuFolders.getFolderResolvedApps(root.activeFolder) || []).length > 0
+
+                                        Repeater {
+                                            model: StartMenuFolders.getFolderResolvedApps(root.activeFolder)
+                                            delegate: Item {
+                                                id: folderAppItem
+                                                required property var modelData
+                                                width: 86
+                                                implicitHeight: 84
+
+                                                // 1. Background Hover highlight
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: 8
+                                                    color: (folderAppMouseArea.containsMouse || removeBtn.hovered) ? Appearance.colors.colLayer1Hover : "transparent"
+                                                }
+
+                                                // 2. MouseArea for launching / context menu
+                                                MouseArea {
+                                                    id: folderAppMouseArea
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                                    z: 1
+
+                                                    onClicked: (mouse) => {
+                                                        if (mouse.button === Qt.RightButton) {
+                                                            root.contextMenuTargetApp = modelData;
+                                                            const p = mapToItem(startMenuCard, mouse.x, mouse.y);
+                                                            root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 240));
+                                                            root.appContextMenuOpen = true;
+                                                        } else if (mouse.button === Qt.LeftButton) {
+                                                            if (modelData) {
+                                                                try {
+                                                                    if (modelData.runInTerminal && modelData.command) {
+                                                                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                                    } else if (typeof modelData.execute === "function") {
+                                                                        modelData.execute();
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.warn("[Win11StartMenu] Launch error:", e);
+                                                                }
+                                                                GlobalStates.startMenuOpen = false;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // 3. App icon + label layout
+                                                ColumnLayout {
+                                                    anchors.centerIn: parent
+                                                    spacing: 6
+                                                    z: 2
+
+                                                    Item {
+                                                        Layout.alignment: Qt.AlignHCenter
+                                                        width: 38
+                                                        height: 38
+
+                                                        IconImage {
+                                                            anchors.fill: parent
+                                                            source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                            implicitSize: 38
+                                                        }
+                                                    }
+
+                                                    StyledText {
+                                                        Layout.alignment: Qt.AlignHCenter
+                                                        Layout.preferredWidth: 80
+                                                        text: modelData?.name ?? ""
+                                                        font.pixelSize: 11
+                                                        color: Appearance.colors.colOnLayer0
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+
+                                                // 4. Close 'X' Button on TOP (z: 10) so clicks are isolated and NEVER trigger the MouseArea underneath
+                                                RippleButton {
+                                                    id: removeBtn
+                                                    z: 10
+                                                    anchors.top: parent.top
+                                                    anchors.right: parent.right
+                                                    anchors.margins: 2
+                                                    visible: folderAppMouseArea.containsMouse || removeBtn.hovered
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    buttonRadius: Appearance.rounding.full
+                                                    colBackground: Appearance.colors.colLayer1
+                                                    colBackgroundHover: Appearance.colors.colErrorContainer
+                                                    onClicked: {
+                                                        if (root.activeFolder && modelData) {
+                                                            const targetId = modelData.id || modelData.appId || modelData.name;
+                                                            StartMenuFolders.removeAppFromFolder(root.activeFolder.id, targetId);
+                                                            root.activeFolder = StartMenuFolders.getFolder(root.activeFolder.id);
+                                                        }
+                                                    }
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        text: "close"
+                                                        iconSize: 12
+                                                        color: Appearance.colors.colError
+                                                    }
+                                                    StyledToolTip { text: Translation.tr("Remove from Folder") }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Empty Folder placeholder
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 24
+                                        visible: (StartMenuFolders.getFolderResolvedApps(root.activeFolder) || []).length === 0
+                                        spacing: 12
+
+                                        StyledText {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: Translation.tr("Folder is empty. Click '+' to add applications.")
+                                            font.pixelSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colOnLayer1
+                                        }
+
+                                        RippleButton {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            implicitWidth: 160
+                                            implicitHeight: 34
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                root.addAppSearchQuery = "";
+                                                root.addAppToFolderDialogOpen = true;
+                                            }
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 6
+                                                MaterialSymbol { text: "add"; iconSize: 18; color: Appearance.colors.colPrimary }
+                                                StyledText { text: Translation.tr("Add Application"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // State 4: DEFAULT (PINNED + RECOMMENDED + CATEGORIES)
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    visible: root.searchText.trim() === "" && !root.showAllApps && !root.folderModalOpen
                                     spacing: 14
 
                                     // --- Pinned Header ---
@@ -740,6 +1048,7 @@ Scope {
                                         Layout.fillWidth: true
                                         Layout.leftMargin: 6
                                         Layout.rightMargin: 6
+                                        spacing: 6
 
                                         StyledText {
                                             text: Translation.tr("Pinned")
@@ -749,6 +1058,34 @@ Scope {
                                         }
 
                                         Item { Layout.fillWidth: true }
+
+                                        // + Nova Pasta Button
+                                        RippleButton {
+                                            implicitWidth: 104
+                                            implicitHeight: 26
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                root.newFolderNameInput = "";
+                                                root.newFolderDialogOpen = true;
+                                            }
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                MaterialSymbol {
+                                                    text: "create_new_folder"
+                                                    iconSize: 14
+                                                    color: Appearance.colors.colPrimary
+                                                }
+                                                StyledText {
+                                                    text: Translation.tr("New folder")
+                                                    font.pixelSize: Appearance.font.pixelSize.small
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                            }
+                                        }
 
                                         RippleButton {
                                             implicitWidth: 84
@@ -775,67 +1112,322 @@ Scope {
                                         }
                                     }
 
-                                    // --- Pinned Flow Layout ---
+                                    // --- Pinned Flow Layout (Folders + Apps with Drag-and-Drop) ---
                                     Flow {
                                         Layout.fillWidth: true
                                         spacing: 8
 
+                                        // App Folders
+                                        Repeater {
+                                            model: StartMenuFolders.list
+                                            delegate: Item {
+                                                id: folderCardBtn
+                                                required property var modelData
+                                                width: 86
+                                                implicitHeight: 84
+
+                                                readonly property bool isHoveredByDrag: {
+                                                    if (!root.isDraggingApp) return false;
+                                                    const local = mapFromItem(startMenuCard, root.dragCurrentPos.x, root.dragCurrentPos.y);
+                                                    return local.x >= 0 && local.x <= width && local.y >= 0 && local.y <= height;
+                                                }
+
+                                                onIsHoveredByDragChanged: {
+                                                    if (isHoveredByDrag) {
+                                                        root.dragDropTargetFolder = modelData;
+                                                        root.dragDropTargetApp = null;
+                                                    } else if (root.dragDropTargetFolder === modelData) {
+                                                        root.dragDropTargetFolder = null;
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    id: folderBg
+                                                    anchors.fill: parent
+                                                    radius: 8
+                                                    color: folderMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7) : "transparent")
+                                                    border.width: isHoveredByDrag ? 2 : 0
+                                                    border.color: Appearance.colors.colPrimary
+                                                    scale: isHoveredByDrag ? 1.08 : (folderMouseArea.pressed ? 0.95 : 1.0)
+                                                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                                                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                                                    ColumnLayout {
+                                                        anchors.centerIn: parent
+                                                        spacing: 6
+
+                                                        // 2x2 Miniature Preview Container matching Windows 11 Start Menu
+                                                        Rectangle {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            width: 48
+                                                            height: 48
+                                                            radius: 12
+                                                            color: ColorUtils.mix(Appearance.colors.colLayer1, Appearance.colors.colLayer0, 0.4)
+                                                            border.width: 1
+                                                            border.color: Appearance.colors.colLayer0Border
+
+                                                            // 2x2 Icons Grid
+                                                            GridLayout {
+                                                                anchors.centerIn: parent
+                                                                columns: 2
+                                                                rows: 2
+                                                                rowSpacing: 3
+                                                                columnSpacing: 3
+                                                                visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 0
+
+                                                                // Slot 1 (Top-Left)
+                                                                Item {
+                                                                    width: 18; height: 18
+                                                                    visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 0
+                                                                    IconImage {
+                                                                        anchors.fill: parent
+                                                                        source: Quickshell.iconPath(StartMenuFolders.getFolderResolvedApps(modelData)[0]?.icon ?? "", "application-x-executable")
+                                                                        implicitSize: 18
+                                                                    }
+                                                                }
+
+                                                                // Slot 2 (Top-Right)
+                                                                Item {
+                                                                    width: 18; height: 18
+                                                                    visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 1
+                                                                    IconImage {
+                                                                        anchors.fill: parent
+                                                                        source: Quickshell.iconPath(StartMenuFolders.getFolderResolvedApps(modelData)[1]?.icon ?? "", "application-x-executable")
+                                                                        implicitSize: 18
+                                                                    }
+                                                                }
+
+                                                                // Slot 3 (Bottom-Left)
+                                                                Item {
+                                                                    width: 18; height: 18
+                                                                    visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 2
+                                                                    IconImage {
+                                                                        anchors.fill: parent
+                                                                        source: Quickshell.iconPath(StartMenuFolders.getFolderResolvedApps(modelData)[2]?.icon ?? "", "application-x-executable")
+                                                                        implicitSize: 18
+                                                                    }
+                                                                }
+
+                                                                // Slot 4 (Bottom-Right)
+                                                                Item {
+                                                                    width: 18; height: 18
+                                                                    visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 3
+
+                                                                    // 1 single icon if exactly 4 apps
+                                                                    IconImage {
+                                                                        anchors.fill: parent
+                                                                        visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length === 4
+                                                                        source: Quickshell.iconPath(StartMenuFolders.getFolderResolvedApps(modelData)[3]?.icon ?? "", "application-x-executable")
+                                                                        implicitSize: 18
+                                                                    }
+
+                                                                    // 2x2 micro-grid cluster if > 4 apps (Windows 11 style)
+                                                                    GridLayout {
+                                                                        anchors.fill: parent
+                                                                        columns: 2
+                                                                        rows: 2
+                                                                        rowSpacing: 1
+                                                                        columnSpacing: 1
+                                                                        visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length > 4
+
+                                                                        Repeater {
+                                                                            model: (StartMenuFolders.getFolderResolvedApps(modelData) || []).slice(3, 7)
+                                                                            delegate: IconImage {
+                                                                                required property var modelData
+                                                                                source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                                                implicitSize: 8
+                                                                                width: 8; height: 8
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Empty folder fallback icon
+                                                            MaterialSymbol {
+                                                                anchors.centerIn: parent
+                                                                visible: (StartMenuFolders.getFolderResolvedApps(modelData) || []).length === 0
+                                                                text: "folder"
+                                                                iconSize: 24
+                                                                color: Appearance.colors.colPrimary
+                                                            }
+                                                        }
+
+                                                        StyledText {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            Layout.preferredWidth: 80
+                                                            text: modelData?.name ?? Translation.tr("Folder")
+                                                            font.pixelSize: 11
+                                                            color: Appearance.colors.colOnLayer0
+                                                            horizontalAlignment: Text.AlignHCenter
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: folderMouseArea
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                                                    onClicked: (mouse) => {
+                                                        if (mouse.button === Qt.RightButton) {
+                                                            root.activeFolder = modelData;
+                                                            root.contextMenuTargetApp = null;
+                                                            const p = mapToItem(startMenuCard, mouse.x, mouse.y);
+                                                            root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                            root.appContextMenuOpen = true;
+                                                            root.powerFlyoutOpen = false;
+                                                        } else if (mouse.button === Qt.LeftButton) {
+                                                            root.activeFolder = modelData;
+                                                            root.folderModalOpen = true;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Individual Pinned Apps (With Drag & Drop support)
                                         Repeater {
                                             model: root.pinnedList
 
-                                            delegate: RippleButton {
+                                            delegate: Item {
+                                                id: pinnedAppItem
                                                 required property var modelData
                                                 width: 86
-                                                implicitHeight: 76
-                                                buttonRadius: 8
-                                                colBackground: "transparent"
-                                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                altAction: (event) => {
-                                                    root.contextMenuTargetApp = modelData;
-                                                    const p = mapToItem(startMenuCard, event.x, event.y);
-                                                    root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
-                                                    root.appContextMenuOpen = true;
-                                                    root.powerFlyoutOpen = false;
+                                                implicitHeight: 84
+
+                                                readonly property bool isHoveredByDrag: {
+                                                    if (!root.isDraggingApp || root.draggingApp === modelData) return false;
+                                                    const local = mapFromItem(startMenuCard, root.dragCurrentPos.x, root.dragCurrentPos.y);
+                                                    return local.x >= 0 && local.x <= width && local.y >= 0 && local.y <= height;
                                                 }
-                                                onClicked: {
-                                                    if (modelData) {
-                                                        try {
-                                                            if (modelData.runInTerminal && modelData.command) {
-                                                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
-                                                            } else if (typeof modelData.execute === "function") {
-                                                                modelData.execute();
+
+                                                onIsHoveredByDragChanged: {
+                                                    if (isHoveredByDrag) {
+                                                        root.dragDropTargetApp = modelData;
+                                                        root.dragDropTargetFolder = null;
+                                                    } else if (root.dragDropTargetApp === modelData) {
+                                                        root.dragDropTargetApp = null;
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    id: appCardBg
+                                                    anchors.fill: parent
+                                                    radius: 8
+                                                    color: appMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colSecondary, 0.7) : "transparent")
+                                                    border.width: isHoveredByDrag ? 2 : 0
+                                                    border.color: Appearance.colors.colSecondary
+                                                    scale: isHoveredByDrag ? 1.08 : (appMouseArea.pressed ? 0.95 : 1.0)
+                                                    opacity: (root.isDraggingApp && root.draggingApp === modelData) ? 0.3 : 1.0
+                                                    Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                                                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                                                    ColumnLayout {
+                                                        anchors.centerIn: parent
+                                                        spacing: 6
+
+                                                        Item {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            width: 38
+                                                            height: 38
+
+                                                            IconImage {
+                                                                anchors.fill: parent
+                                                                source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                                implicitSize: 38
                                                             }
-                                                        } catch (e) {
-                                                            console.warn("[Win11StartMenu] Launch error:", e);
                                                         }
-                                                        GlobalStates.startMenuOpen = false;
+
+                                                        StyledText {
+                                                            Layout.alignment: Qt.AlignHCenter
+                                                            Layout.preferredWidth: 80
+                                                            text: modelData?.name ?? ""
+                                                            font.pixelSize: 11
+                                                            color: Appearance.colors.colOnLayer0
+                                                            horizontalAlignment: Text.AlignHCenter
+                                                            elide: Text.ElideRight
+                                                        }
                                                     }
                                                 }
 
-                                                ColumnLayout {
-                                                    anchors.centerIn: parent
-                                                    spacing: 6
+                                                MouseArea {
+                                                    id: appMouseArea
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
 
-                                                    Item {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        width: 36
-                                                        height: 36
+                                                    property point pressPos: Qt.point(0, 0)
+                                                    property bool dragTriggered: false
 
-                                                        IconImage {
-                                                            anchors.fill: parent
-                                                            source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
-                                                            implicitSize: 36
+                                                    onPressed: (mouse) => {
+                                                        if (mouse.button === Qt.RightButton) {
+                                                            root.contextMenuTargetApp = modelData;
+                                                            root.activeFolder = null;
+                                                            const p = mapToItem(startMenuCard, mouse.x, mouse.y);
+                                                            root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 240));
+                                                            root.appContextMenuOpen = true;
+                                                            root.powerFlyoutOpen = false;
+                                                        } else if (mouse.button === Qt.LeftButton) {
+                                                            pressPos = Qt.point(mouse.x, mouse.y);
+                                                            dragTriggered = false;
                                                         }
                                                     }
 
-                                                    StyledText {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        Layout.preferredWidth: 80
-                                                        text: modelData?.name ?? ""
-                                                        font.pixelSize: 11
-                                                        color: Appearance.colors.colOnLayer0
-                                                        horizontalAlignment: Text.AlignHCenter
-                                                        elide: Text.ElideRight
+                                                    onPositionChanged: (mouse) => {
+                                                        if (mouse.buttons & Qt.LeftButton) {
+                                                            const dx = mouse.x - pressPos.x;
+                                                            const dy = mouse.y - pressPos.y;
+                                                            if (!dragTriggered && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+                                                                dragTriggered = true;
+                                                                root.isDraggingApp = true;
+                                                                root.draggingApp = modelData;
+                                                            }
+                                                            if (root.isDraggingApp) {
+                                                                root.dragCurrentPos = mapToItem(startMenuCard, mouse.x, mouse.y);
+                                                            }
+                                                        }
+                                                    }
+
+                                                    onReleased: (mouse) => {
+                                                        if (mouse.button === Qt.LeftButton) {
+                                                            if (root.isDraggingApp) {
+                                                                if (root.dragDropTargetFolder) {
+                                                                    StartMenuFolders.addAppToFolder(root.dragDropTargetFolder.id, root.draggingApp.id);
+                                                                    if (root.isAppPinned(root.draggingApp)) {
+                                                                        root.togglePinApp(root.draggingApp);
+                                                                    }
+                                                                } else if (root.dragDropTargetApp && root.dragDropTargetApp !== root.draggingApp) {
+                                                                    StartMenuFolders.createFolderFromApps(root.dragDropTargetApp.id, root.draggingApp.id, "Nova Pasta");
+                                                                    if (root.isAppPinned(root.dragDropTargetApp)) {
+                                                                        root.togglePinApp(root.dragDropTargetApp);
+                                                                    }
+                                                                    if (root.isAppPinned(root.draggingApp)) {
+                                                                        root.togglePinApp(root.draggingApp);
+                                                                    }
+                                                                }
+                                                                root.isDraggingApp = false;
+                                                                root.draggingApp = null;
+                                                                root.dragDropTargetFolder = null;
+                                                                root.dragDropTargetApp = null;
+                                                                dragTriggered = false;
+                                                            } else if (!dragTriggered) {
+                                                                if (modelData) {
+                                                                    try {
+                                                                        if (modelData.runInTerminal && modelData.command) {
+                                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                                        } else if (typeof modelData.execute === "function") {
+                                                                            modelData.execute();
+                                                                        }
+                                                                    } catch (e) {
+                                                                        console.warn("[Win11StartMenu] Launch error:", e);
+                                                                    }
+                                                                    GlobalStates.startMenuOpen = false;
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1101,16 +1693,20 @@ Scope {
                         }
                     }
 
-                    // Dismiss overlay for power flyout & context menu
+                    // Dismiss overlay for power flyout, context menu & dialogs
                     MouseArea {
                         anchors.fill: parent
-                        visible: root.powerFlyoutOpen || root.appContextMenuOpen
-                        z: 95
+                        visible: root.powerFlyoutOpen || root.appContextMenuOpen || root.newFolderDialogOpen || root.folderPickerOpen || root.addAppToFolderDialogOpen
+                        z: 190
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         onPressed: {
                             root.powerFlyoutOpen = false;
                             root.appContextMenuOpen = false;
                             root.contextMenuTargetApp = null;
+                            root.newFolderDialogOpen = false;
+                            root.folderPickerOpen = false;
+                            root.folderPickerTargetApp = null;
+                            root.addAppToFolderDialogOpen = false;
                         }
                     }
 
@@ -1118,7 +1714,7 @@ Scope {
                     Rectangle {
                         id: powerFlyout
                         visible: root.powerFlyoutOpen
-                        z: 100
+                        z: 200
                         anchors.right: parent.right
                         anchors.rightMargin: 16
                         anchors.bottom: parent.bottom
@@ -1231,7 +1827,7 @@ Scope {
                                 color: Appearance.colors.colLayer0Border
                             }
 
-                                    RippleButton {
+                            RippleButton {
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 buttonRadius: 6
@@ -1254,13 +1850,13 @@ Scope {
                         }
                     }
 
-                    // App Context Menu (Right-click on any app)
+                    // App & Folder Context Menu (Right-click)
                     Rectangle {
                         id: appContextMenu
-                        visible: root.appContextMenuOpen && root.contextMenuTargetApp !== null
-                        z: 200
+                        visible: root.appContextMenuOpen && (root.contextMenuTargetApp !== null || root.activeFolder !== null)
+                        z: 220
                         x: Math.max(8, Math.min(root.contextMenuPos.x, startMenuCard.width - 220))
-                        y: Math.max(8, Math.min(root.contextMenuPos.y, startMenuCard.height - 180))
+                        y: Math.max(8, Math.min(root.contextMenuPos.y, startMenuCard.height - 210))
                         width: 210
                         height: appContextMenuCol.implicitHeight + 16
                         radius: Appearance.rounding.normal
@@ -1279,8 +1875,35 @@ Scope {
                             anchors.margins: 8
                             spacing: 2
 
-                            // Header: App Icon & Name
+                            // 1. Header when targeting a Folder
                             RowLayout {
+                                visible: root.contextMenuTargetApp === null && root.activeFolder !== null
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 4
+                                Layout.rightMargin: 4
+                                Layout.topMargin: 2
+                                Layout.bottomMargin: 4
+                                spacing: 8
+
+                                MaterialSymbol {
+                                    text: "folder"
+                                    iconSize: 20
+                                    color: Appearance.colors.colPrimary
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: root.activeFolder?.name ?? Translation.tr("Folder")
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnLayer0
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            // 2. Header when targeting an App
+                            RowLayout {
+                                visible: root.contextMenuTargetApp !== null
                                 Layout.fillWidth: true
                                 Layout.leftMargin: 4
                                 Layout.rightMargin: 4
@@ -1309,8 +1932,55 @@ Scope {
                                 color: Appearance.colors.colLayer0Border
                             }
 
-                            // Action: Open / Run
+                            // Folder Actions
                             RippleButton {
+                                visible: root.contextMenuTargetApp === null && root.activeFolder !== null
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.appContextMenuOpen = false;
+                                    root.folderModalOpen = true;
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "folder_open"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Open Folder"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                visible: root.contextMenuTargetApp === null && root.activeFolder !== null
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colErrorContainer
+                                onClicked: {
+                                    if (root.activeFolder) {
+                                        StartMenuFolders.deleteFolder(root.activeFolder.id);
+                                        root.activeFolder = null;
+                                    }
+                                    root.appContextMenuOpen = false;
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "delete"; iconSize: 16; color: Appearance.colors.colError }
+                                    StyledText { text: Translation.tr("Delete Folder"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colError }
+                                }
+                            }
+
+                            // App Actions: Open / Run
+                            RippleButton {
+                                visible: root.contextMenuTargetApp !== null
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 buttonRadius: 6
@@ -1342,8 +2012,9 @@ Scope {
                                 }
                             }
 
-                            // Action: Pin / Unpin from Start
+                            // App Action: Pin / Unpin from Start
                             RippleButton {
+                                visible: root.contextMenuTargetApp !== null
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 buttonRadius: 6
@@ -1372,9 +2043,90 @@ Scope {
                                 }
                             }
 
-                            // Action: Run in Terminal
+                            // App Action: Add to Folder (Direct Submenu List)
+                            ColumnLayout {
+                                visible: root.contextMenuTargetApp !== null
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 6
+                                    Layout.rightMargin: 6
+                                    Layout.topMargin: 2
+                                    spacing: 6
+                                    MaterialSymbol { text: "folder_open"; iconSize: 14; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Add to folder"); font.weight: Font.DemiBold; font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colOnLayer1 }
+                                }
+
+                                Repeater {
+                                    model: StartMenuFolders.list
+                                    delegate: RippleButton {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        implicitHeight: 28
+                                        buttonRadius: 5
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            if (root.contextMenuTargetApp?.id && modelData?.id) {
+                                                StartMenuFolders.addAppToFolder(modelData.id, root.contextMenuTargetApp.id);
+                                                if (root.isAppPinned(root.contextMenuTargetApp)) {
+                                                    root.togglePinApp(root.contextMenuTargetApp);
+                                                }
+                                            }
+                                            root.appContextMenuOpen = false;
+                                        }
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 8
+                                            spacing: 6
+                                            MaterialSymbol { text: "folder"; iconSize: 14; color: Appearance.colors.colPrimary }
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData?.name ?? Translation.tr("Folder")
+                                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                                color: Appearance.colors.colOnLayer0
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RippleButton {
+                                    Layout.fillWidth: true
+                                    implicitHeight: 28
+                                    buttonRadius: 5
+                                    colBackground: "transparent"
+                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                    onClicked: {
+                                        const app = root.contextMenuTargetApp;
+                                        root.appContextMenuOpen = false;
+                                        if (app?.id) {
+                                            root.newFolderNameInput = "";
+                                            const newF = StartMenuFolders.createFolder("Nova Pasta", app.id);
+                                            if (root.isAppPinned(app)) {
+                                                root.togglePinApp(app);
+                                            }
+                                            root.activeFolder = newF;
+                                            root.folderModalOpen = true;
+                                        }
+                                    }
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 8
+                                        spacing: 6
+                                        MaterialSymbol { text: "create_new_folder"; iconSize: 14; color: Appearance.colors.colPrimary }
+                                        StyledText { text: Translation.tr("Create New Folder"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colPrimary }
+                                    }
+                                }
+                            }
+
+                            // App Action: Run in Terminal
                             RippleButton {
-                                visible: root.contextMenuTargetApp?.command !== undefined || root.contextMenuTargetApp?.exec !== undefined
+                                visible: root.contextMenuTargetApp !== null && (root.contextMenuTargetApp?.command !== undefined || root.contextMenuTargetApp?.exec !== undefined)
                                 Layout.fillWidth: true
                                 implicitHeight: 32
                                 buttonRadius: 6
@@ -1398,6 +2150,402 @@ Scope {
                                     StyledText { text: Translation.tr("Run in Terminal"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
                                 }
                             }
+                        }
+                    }
+
+                    // ==========================================
+                    // NEW FOLDER DIALOG (Modal Popover)
+                    // ==========================================
+                    Rectangle {
+                        id: newFolderDialog
+                        visible: root.newFolderDialogOpen
+                        z: 230
+                        anchors.centerIn: parent
+                        width: 320
+                        height: newFolderCol.implicitHeight + 32
+                        radius: Appearance.rounding.large
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.9)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow { target: newFolderDialog }
+
+                        ColumnLayout {
+                            id: newFolderCol
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                MaterialSymbol { text: "create_new_folder"; iconSize: 22; color: Appearance.colors.colPrimary }
+                                StyledText { text: Translation.tr("New Folder"); font.weight: Font.DemiBold; font.pixelSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colOnLayer0 }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 36
+                                radius: 6
+                                color: Appearance.colors.colLayer1
+                                border.width: 1
+                                border.color: Appearance.colors.colLayer0Border
+
+                                TextInput {
+                                    id: newFolderNameTextInput
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer0
+                                    font.family: Appearance.font.family.main
+                                    selectByMouse: true
+                                    text: root.newFolderNameInput
+                                    onTextChanged: root.newFolderNameInput = text
+                                    onAccepted: {
+                                        if (text.trim() !== "") {
+                                            StartMenuFolders.createFolder(text.trim());
+                                            root.newFolderDialogOpen = false;
+                                        }
+                                    }
+
+                                    Text {
+                                        text: Translation.tr("Folder name...")
+                                        color: Appearance.colors.colOnLayer1Inactive
+                                        font: parent.font
+                                        visible: !parent.text
+                                        anchors.fill: parent
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+
+                                Item { Layout.fillWidth: true }
+
+                                RippleButton {
+                                    implicitWidth: 80
+                                    implicitHeight: 32
+                                    buttonRadius: 6
+                                    colBackground: Appearance.colors.colLayer1
+                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                    onClicked: root.newFolderDialogOpen = false
+                                    StyledText { anchors.centerIn: parent; text: Translation.tr("Cancel"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+
+                                RippleButton {
+                                    implicitWidth: 80
+                                    implicitHeight: 32
+                                    buttonRadius: 6
+                                    colBackground: Appearance.colors.colPrimary
+                                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                                    onClicked: {
+                                        if (root.newFolderNameInput.trim() !== "") {
+                                            StartMenuFolders.createFolder(root.newFolderNameInput.trim());
+                                            root.newFolderDialogOpen = false;
+                                        }
+                                    }
+                                    StyledText { anchors.centerIn: parent; text: Translation.tr("Create"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.m3colors.m3onPrimary }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // FOLDER PICKER DIALOG (Add App to existing/new folder)
+                    // ==========================================
+                    Rectangle {
+                        id: folderPickerDialog
+                        visible: root.folderPickerOpen && root.folderPickerTargetApp !== null
+                        z: 230
+                        anchors.centerIn: parent
+                        width: 320
+                        height: Math.min(380, folderPickerCol.implicitHeight + 32)
+                        radius: Appearance.rounding.large
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.9)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow { target: folderPickerDialog }
+
+                        ColumnLayout {
+                            id: folderPickerCol
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 10
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                MaterialSymbol { text: "folder"; iconSize: 20; color: Appearance.colors.colPrimary }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Add to Folder")
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer0
+                                }
+                            }
+
+                            // Folders list
+                            Flickable {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(180, folderPickerListCol.implicitHeight)
+                                contentHeight: folderPickerListCol.implicitHeight
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                ColumnLayout {
+                                    id: folderPickerListCol
+                                    width: parent.width
+                                    spacing: 4
+
+                                    Repeater {
+                                        model: StartMenuFolders.list
+                                        delegate: RippleButton {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 34
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (root.folderPickerTargetApp?.id && modelData?.id) {
+                                                    StartMenuFolders.addAppToFolder(modelData.id, root.folderPickerTargetApp.id);
+                                                    root.folderPickerOpen = false;
+                                                    root.folderPickerTargetApp = null;
+                                                }
+                                            }
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 10
+                                                anchors.rightMargin: 10
+                                                spacing: 8
+                                                MaterialSymbol { text: "folder"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: modelData?.name ?? Translation.tr("Folder")
+                                                    font.pixelSize: Appearance.font.pixelSize.small
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Appearance.colors.colLayer0Border
+                            }
+
+                            // Create New Folder and Add
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const app = root.folderPickerTargetApp;
+                                    root.folderPickerOpen = false;
+                                    if (app?.id) {
+                                        root.newFolderNameInput = "";
+                                        const newF = StartMenuFolders.createFolder("Nova Pasta", app.id);
+                                        root.activeFolder = newF;
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    MaterialSymbol { text: "add"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Create New Folder"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colPrimary }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // ADD APP TO FOLDER DIALOG (App search & picker)
+                    // ==========================================
+                    Rectangle {
+                        id: addAppToFolderDialog
+                        visible: root.addAppToFolderDialogOpen && root.activeFolder !== null
+                        z: 230
+                        anchors.centerIn: parent
+                        width: 360
+                        height: 420
+                        radius: Appearance.rounding.large
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.9)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow { target: addAppToFolderDialog }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 10
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                MaterialSymbol { text: "apps"; iconSize: 20; color: Appearance.colors.colPrimary }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Add Application")
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer0
+                                }
+                                RippleButton {
+                                    implicitWidth: 26
+                                    implicitHeight: 26
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: "transparent"
+                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                    onClicked: root.addAppToFolderDialogOpen = false
+                                    MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 16; color: Appearance.colors.colOnLayer1 }
+                                }
+                            }
+
+                            // Search bar
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                radius: 6
+                                color: Appearance.colors.colLayer1
+                                border.width: 1
+                                border.color: Appearance.colors.colLayer0Border
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 6
+
+                                    MaterialSymbol { text: "search"; iconSize: 16; color: Appearance.colors.colOnLayer1 }
+                                    TextInput {
+                                        id: addAppSearchInput
+                                        Layout.fillWidth: true
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        color: Appearance.colors.colOnLayer0
+                                        font.family: Appearance.font.family.main
+                                        selectByMouse: true
+                                        text: root.addAppSearchQuery
+                                        onTextChanged: root.addAppSearchQuery = text
+
+                                        Text {
+                                            text: Translation.tr("Search apps...")
+                                            color: Appearance.colors.colOnLayer1Inactive
+                                            font: parent.font
+                                            visible: !parent.text
+                                            anchors.fill: parent
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Apps list
+                            Flickable {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                contentHeight: addAppListCol.implicitHeight
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                ColumnLayout {
+                                    id: addAppListCol
+                                    width: parent.width
+                                    spacing: 4
+
+                                    Repeater {
+                                        model: {
+                                            const all = AppSearch.list || [];
+                                            const q = root.addAppSearchQuery.trim().toLowerCase();
+                                            if (q === "") return all.slice(0, 30);
+                                            return all.filter(a => a && a.name && a.name.toLowerCase().includes(q)).slice(0, 30);
+                                        }
+                                        delegate: RippleButton {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            implicitHeight: 38
+                                            buttonRadius: 6
+                                            colBackground: Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (root.activeFolder?.id && modelData?.id) {
+                                                    StartMenuFolders.addAppToFolder(root.activeFolder.id, modelData.id);
+                                                    root.activeFolder = StartMenuFolders.getFolder(root.activeFolder.id);
+                                                    root.addAppToFolderDialogOpen = false;
+                                                }
+                                            }
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 8
+                                                anchors.rightMargin: 8
+                                                spacing: 10
+
+                                                IconImage {
+                                                    source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                    implicitSize: 22
+                                                }
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: modelData?.name ?? ""
+                                                    font.pixelSize: Appearance.font.pixelSize.small
+                                                    color: Appearance.colors.colOnLayer0
+                                                    elide: Text.ElideRight
+                                                }
+
+                                                MaterialSymbol {
+                                                    text: (root.activeFolder && Array.isArray(root.activeFolder.apps) && root.activeFolder.apps.includes(modelData?.id)) ? "check" : "add"
+                                                    iconSize: 16
+                                                    color: Appearance.colors.colPrimary
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Floating Drag Proxy
+                    Rectangle {
+                        id: dragProxy
+                        visible: root.isDraggingApp && root.draggingApp !== null
+                        z: 999
+                        x: root.dragCurrentPos.x - 24
+                        y: root.dragCurrentPos.y - 24
+                        width: 52
+                        height: 52
+                        radius: 12
+                        color: ColorUtils.mix(Appearance.colors.colLayer1, Appearance.colors.colLayer0, 0.2)
+                        border.width: 2
+                        border.color: Appearance.colors.colPrimary
+                        rotation: 5
+                        scale: 1.1
+                        opacity: 0.92
+
+                        StyledRectangularShadow { target: dragProxy }
+
+                        IconImage {
+                            anchors.centerIn: parent
+                            source: Quickshell.iconPath(root.draggingApp?.icon ?? "", "application-x-executable")
+                            implicitSize: 36
+                            width: 36
+                            height: 36
                         }
                     }
                 }
