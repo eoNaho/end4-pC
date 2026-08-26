@@ -653,6 +653,50 @@ ContentPage {
                     }
                 }
             }
+
+            ContentSubsection {
+                title: Translation.tr("Start Menu (Windows 11)")
+                GroupedList {
+                    ConfigSwitch {
+                        buttonIcon: "align_horizontal_center"
+                        text: Translation.tr("Center Start Menu")
+                        checked: Config.options.dock.startMenuCentered ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuCentered = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "dock_to_left"
+                        text: Translation.tr("Show Companion Panel")
+                        checked: Config.options.dock.startMenuCompanion ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuCompanion = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "music_note"
+                        enabled: Config.options.dock.startMenuCompanion ?? true
+                        text: Translation.tr("Media Player in Companion Panel")
+                        checked: Config.options.dock.startMenuShowMedia ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowMedia = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "smartphone"
+                        enabled: Config.options.dock.startMenuCompanion ?? true
+                        text: Translation.tr("Phone & KDE Connect in Companion Panel")
+                        checked: Config.options.dock.startMenuShowKdeConnect ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowKdeConnect = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "description"
+                        text: Translation.tr("Recent Files in Recommended")
+                        checked: Config.options.dock.startMenuShowRecentFiles ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowRecentFiles = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "calculate"
+                        text: Translation.tr("Enable Search Calculator")
+                        checked: Config.options.dock.startMenuEnableCalculator ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuEnableCalculator = checked }
+                    }
+                }
+            }
         }
 
         ContentSection {

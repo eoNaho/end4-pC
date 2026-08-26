@@ -13,6 +13,7 @@ import Quickshell.Widgets
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Services.Mpris
 
 Scope {
     id: startMenuScope
@@ -58,16 +59,13 @@ Scope {
             right: true
         }
 
-        mask: Region {
-            item: GlobalStates.startMenuOpen ? mainContainer : null
-        }
-
         property string searchText: ""
         property string rawSearchInput: ""
         property int searchSelectedIndex: 0
         property bool powerFlyoutOpen: false
         property bool showAllApps: false
         property var contextMenuTargetApp: null
+        property var contextMenuTargetFile: null
         property point contextMenuPos: Qt.point(0, 0)
         property bool appContextMenuOpen: false
         property var activeFolder: null
@@ -83,6 +81,12 @@ Scope {
         property bool isDraggingApp: false
         property var dragDropTargetFolder: null
         property var dragDropTargetApp: null
+        property string recommendedTab: "all"
+        property bool alphabetJumpModalOpen: false
+        property string copiedToastText: ""
+
+        readonly property bool startMenuCentered: Config.options?.dock?.startMenuCentered ?? true
+        readonly property bool showCompanion: Config.options?.dock?.startMenuCompanion ?? true
 
         function isAppPinned(app) {
             if (!app) return false;
@@ -97,17 +101,110 @@ Scope {
                 TaskbarApps.togglePin(id);
             }
         }
+
+        function evaluateMath(raw) {
+            if (!raw || typeof raw !== "string") return null;
+            let s = raw.trim();
+            if (s.length < 2) return null;
+            
+            s = s.replace(/(\d+(\.\d+)?)\s*%\s*(of|\*)\s*(\d+(\.\d+)?)/gi, "($1/100)*$4");
+            s = s.replace(/(\d+(\.\d+)?)\s*%/g, "($1/100)");
+            s = s.replace(/\^/g, "**");
+            
+            if (!/[\d\)]\s*[\+\-\*\/\%]\s*[\d\(]/.test(s) && !/^(sqrt|sin|cos|tan|log|abs|pow|round|floor|ceil)\s*\(/.test(s) && !/^\d+\s*(\*\*|\^)\s*\d+/.test(s)) {
+                return null;
+            }
+            
+            let safeExpr = s
+                .replace(/\b(sqrt|sin|cos|tan|log|abs|pow|round|floor|ceil)\b/gi, "Math.$1")
+                .replace(/\bpi\b/gi, "Math.PI")
+                .replace(/\be\b/gi, "Math.E");
+                
+            if (/[^0-9\s\+\-\*\/\(\)\.\,MathPIEsqrtincosabwelfr]/.test(safeExpr)) return null;
+
+            try {
+                const val = Function('"use strict"; return (' + safeExpr + ')')();
+                if (typeof val === "number" && isFinite(val) && !isNaN(val)) {
+                    const formatted = (Math.round(val * 1000000) / 1000000).toString();
+                    return {
+                        isCalculator: true,
+                        expression: raw.trim(),
+                        result: formatted,
+                        name: "= " + formatted,
+                        comment: raw.trim() + "  •  " + Translation.tr("Copied to clipboard"),
+                        icon: "calculate",
+                        execute: () => {
+                            Quickshell.clipboardText = formatted;
+                            root.showCopiedToast(formatted);
+                        }
+                    };
+                }
+            } catch (_) {}
+            return null;
+        }
+
+        function showCopiedToast(text) {
+            root.copiedToastText = text;
+            copiedToastTimer.restart();
+        }
+
+        Timer {
+            id: copiedToastTimer
+            interval: 2000
+            repeat: false
+            onTriggered: root.copiedToastText = ""
+        }
+
         property var searchResults: {
             const query = searchText.trim();
             if (query === "") return [];
+            let list = [];
+            
+            if (Config.options?.dock?.startMenuEnableCalculator ?? true) {
+                const mathRes = evaluateMath(query);
+                if (mathRes) {
+                    list.push(mathRes);
+                }
+            }
+
             try {
                 const results = AppSearch.fuzzyQuery(query);
-                if (!results || !Array.isArray(results)) return [];
-                return results.filter(item => item !== null && item !== undefined).slice(0, 15);
+                if (results && Array.isArray(results)) {
+                    list = list.concat(results.filter(item => item !== null && item !== undefined).slice(0, 15));
+                }
             } catch (err) {
                 console.warn("[Win11StartMenu] Search error:", err);
-                return [];
             }
+            return list;
+        }
+
+        readonly property var allAppsFlatList: {
+            const apps = (AppSearch.list || []).slice(0).sort((a, b) => (a?.name || "").localeCompare(b?.name || ""));
+            const list = [];
+            let currentLetter = "";
+            for (let i = 0; i < apps.length; i++) {
+                const app = apps[i];
+                if (!app || !app.name) continue;
+                const firstChar = app.name.charAt(0).toUpperCase();
+                const letter = /[A-Z]/.test(firstChar) ? firstChar : "#";
+                if (letter !== currentLetter) {
+                    currentLetter = letter;
+                    list.push({ isHeader: true, letter: letter });
+                }
+                list.push({ isHeader: false, app: app, letter: letter });
+            }
+            return list;
+        }
+
+        readonly property var alphabetLetterIndices: {
+            const map = {};
+            const flat = root.allAppsFlatList;
+            for (let i = 0; i < flat.length; i++) {
+                if (flat[i].isHeader) {
+                    map[flat[i].letter] = i;
+                }
+            }
+            return map;
         }
 
         Timer {
@@ -191,50 +288,28 @@ Scope {
             return list;
         }
 
-        // Dynamic recommended items based on active running windows & favorite apps
-        readonly property var recommendedList: {
+        // Combined Recommended List: Apps + Real Recent Files
+        readonly property var combinedRecommendedList: {
             let list = [];
             const running = (TaskbarApps.apps || []).filter(a => a && a.appId !== "SEPARATOR" && a.toplevels && a.toplevels.length > 0);
-            for (let i = 0; i < running.length && list.length < 4; i++) {
-                const app = running[i];
-                const desk = DesktopEntries.heuristicLookup(app.appId);
-                if (desk) {
-                    const topTitle = app.toplevels[0]?.title ?? desk.name;
-                    list.push({
-                        id: app.appId,
-                        name: desk.name,
-                        subtitle: (topTitle !== desk.name && topTitle && topTitle.length > 0) ? topTitle : Translation.tr("Active window"),
-                        icon: desk.icon,
-                        execute: () => {
-                            try {
-                                if (app.toplevels && app.toplevels.length > 0 && app.toplevels[0]) app.toplevels[0].activate();
-                                else if (desk.runInTerminal && desk.command) {
-                                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(desk.command.join(' '))}'`]);
-                                } else if (typeof desk.execute === "function") {
-                                    desk.execute();
-                                }
-                            } catch (e) {
-                                console.warn("[Win11StartMenu] Execution error:", e);
-                            }
-                            GlobalStates.startMenuOpen = false;
-                        }
-                    });
-                }
-            }
-            const pinned = Config.options?.dock?.pinnedApps ?? [];
-            for (let i = 0; i < pinned.length && list.length < 4; i++) {
-                const id = pinned[i];
-                if (!list.some(item => item.id === id)) {
-                    const desk = DesktopEntries.heuristicLookup(id);
+            
+            // 1. Running & Active apps
+            if (root.recommendedTab === "all" || root.recommendedTab === "apps") {
+                for (let i = 0; i < running.length && list.length < 3; i++) {
+                    const app = running[i];
+                    const desk = DesktopEntries.heuristicLookup(app.appId);
                     if (desk) {
+                        const topTitle = app.toplevels[0]?.title ?? desk.name;
                         list.push({
-                            id: id,
+                            isFile: false,
+                            id: app.appId,
                             name: desk.name,
-                            subtitle: Translation.tr("Quick access"),
+                            subtitle: (topTitle !== desk.name && topTitle && topTitle.length > 0) ? topTitle : Translation.tr("Active window"),
                             icon: desk.icon,
                             execute: () => {
                                 try {
-                                    if (desk.runInTerminal && desk.command) {
+                                    if (app.toplevels && app.toplevels.length > 0 && app.toplevels[0]) app.toplevels[0].activate();
+                                    else if (desk.runInTerminal && desk.command) {
                                         Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(desk.command.join(' '))}'`]);
                                     } else if (typeof desk.execute === "function") {
                                         desk.execute();
@@ -248,6 +323,60 @@ Scope {
                     }
                 }
             }
+
+            // 2. Real Recent Files from RecentFiles service
+            if ((Config.options?.dock?.startMenuShowRecentFiles ?? true) && (root.recommendedTab === "all" || root.recommendedTab === "files")) {
+                const maxFiles = (root.recommendedTab === "files") ? 6 : (6 - list.length);
+                const recFiles = (RecentFiles.list || []).slice(0, maxFiles);
+                for (let i = 0; i < recFiles.length; i++) {
+                    const f = recFiles[i];
+                    list.push({
+                        isFile: true,
+                        fileObj: f,
+                        name: f.name,
+                        subtitle: f.relativeTime ? `${f.relativeTime}  •  ${f.displayDir}` : f.displayDir,
+                        icon: f.icon,
+                        path: f.path,
+                        execute: () => {
+                            f.execute();
+                            GlobalStates.startMenuOpen = false;
+                        }
+                    });
+                }
+            }
+
+            // Fallback: Pinned shortcuts if still under 4 items
+            if (list.length < 4 && root.recommendedTab !== "files") {
+                const pinned = Config.options?.dock?.pinnedApps ?? [];
+                for (let i = 0; i < pinned.length && list.length < 6; i++) {
+                    const id = pinned[i];
+                    if (!list.some(item => item.id === id)) {
+                        const desk = DesktopEntries.heuristicLookup(id);
+                        if (desk) {
+                            list.push({
+                                isFile: false,
+                                id: id,
+                                name: desk.name,
+                                subtitle: Translation.tr("Quick access"),
+                                icon: desk.icon,
+                                execute: () => {
+                                    try {
+                                        if (desk.runInTerminal && desk.command) {
+                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(desk.command.join(' '))}'`]);
+                                        } else if (typeof desk.execute === "function") {
+                                            desk.execute();
+                                        }
+                                    } catch (e) {
+                                        console.warn("[Win11StartMenu] Execution error:", e);
+                                    }
+                                    GlobalStates.startMenuOpen = false;
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
             return list;
         }
 
@@ -262,12 +391,15 @@ Scope {
                     root.powerFlyoutOpen = false;
                     root.appContextMenuOpen = false;
                     root.contextMenuTargetApp = null;
+                    root.contextMenuTargetFile = null;
                     root.folderModalOpen = false;
                     root.activeFolder = null;
                     root.newFolderDialogOpen = false;
                     root.folderPickerOpen = false;
                     root.folderPickerTargetApp = null;
                     root.addAppToFolderDialogOpen = false;
+                    root.alphabetJumpModalOpen = false;
+                    RecentFiles.reload();
                     if (searchInput) {
                         searchInput.text = "";
                         searchInput.forceActiveFocus();
@@ -279,12 +411,14 @@ Scope {
                     root.powerFlyoutOpen = false;
                     root.appContextMenuOpen = false;
                     root.contextMenuTargetApp = null;
+                    root.contextMenuTargetFile = null;
                     root.folderModalOpen = false;
                     root.activeFolder = null;
                     root.newFolderDialogOpen = false;
                     root.folderPickerOpen = false;
                     root.folderPickerTargetApp = null;
                     root.addAppToFolderDialogOpen = false;
+                    root.alphabetJumpModalOpen = false;
                     GlobalFocusGrab.dismiss();
                 }
             }
@@ -297,14 +431,27 @@ Scope {
             }
         }
 
+        // Fullscreen transparent background dismiss area
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: false
+            z: 0
+            onClicked: {
+                GlobalStates.startMenuOpen = false;
+            }
+        }
+
         // Main Dual Panel Layout (Windows 11 Start Menu + Companion Panel)
         Item {
             id: mainContainer
+            z: 1
             width: mainRow.implicitWidth
             height: mainRow.implicitHeight
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Appearance.sizes.hyprlandGapsOut + 75
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenter: root.startMenuCentered ? parent.horizontalCenter : undefined
+            anchors.left: root.startMenuCentered ? undefined : parent.left
+            anchors.leftMargin: root.startMenuCentered ? 0 : (Appearance.sizes.hyprlandGapsOut + 20)
             transformOrigin: Item.Bottom
 
             scale: GlobalStates.startMenuOpen ? 1.0 : 0.96
@@ -336,25 +483,11 @@ Scope {
                     id: startMenuCard
                     implicitWidth: 600
                     implicitHeight: 640
-                    radius: Appearance.rounding.large + 2
-                    color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.18)
+                    radius: Appearance.rounding.large + 4
+                    color: Appearance.colors.colLayer0
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
                     clip: true
-
-                    StyledRectangularShadow {
-                        target: startMenuCard
-                        visible: GlobalStates.startMenuOpen
-                    }
-
-                    // Top Chamfer Highlight
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
-                        color: Qt.rgba(1, 1, 1, 0.12)
-                    }
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -513,12 +646,164 @@ Scope {
                             }
                         }
 
-                        // ---------------- Main Body ----------------
+                        // ---------------- Dedicated All Apps View (Virtualized ListView) ----------------
+                        ColumnLayout {
+                            id: allAppsViewContainer
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.leftMargin: 20
+                            Layout.rightMargin: 20
+                            visible: root.searchText.trim() === "" && root.showAllApps
+                            spacing: 8
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 6
+                                Layout.rightMargin: 6
+
+                                StyledText {
+                                    text: Translation.tr("All Applications")
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnLayer1
+                                }
+
+                                Item { Layout.fillWidth: true }
+
+                                RippleButton {
+                                    implicitWidth: 72
+                                    implicitHeight: 26
+                                    buttonRadius: 6
+                                    colBackground: Appearance.colors.colLayer1
+                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                    onClicked: root.showAllApps = false
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 4
+                                        MaterialSymbol { text: "arrow_back"; iconSize: 14; color: Appearance.colors.colPrimary }
+                                        StyledText { text: Translation.tr("Back"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                id: allAppsListView
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                spacing: 2
+                                model: (root.showAllApps && root.searchText.trim() === "") ? root.allAppsFlatList : []
+
+                                delegate: Item {
+                                    id: allAppsDelegateItem
+                                    required property var modelData
+                                    required property int index
+                                    width: allAppsListView.width
+                                    height: modelData.isHeader ? 36 : 40
+
+                                    // Letter Header Item
+                                    RippleButton {
+                                        visible: modelData.isHeader === true
+                                        anchors.left: parent.left
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: Appearance.colors.colLayer1
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: root.alphabetJumpModalOpen = true
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: modelData.letter ?? ""
+                                            font.weight: Font.Bold
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            color: Appearance.colors.colPrimary
+                                        }
+                                        StyledToolTip { text: Translation.tr("Jump to letter") }
+                                    }
+
+                                    // Application Item
+                                    RippleButton {
+                                        id: allAppsBtn
+                                        visible: modelData.isHeader !== true
+                                        anchors.fill: parent
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        altAction: (event) => {
+                                            root.contextMenuTargetApp = modelData.app;
+                                            root.contextMenuTargetFile = null;
+                                            const p = mapToItem(startMenuCard, event.x, event.y);
+                                            root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                            root.appContextMenuOpen = true;
+                                            root.powerFlyoutOpen = false;
+                                        }
+                                        onClicked: {
+                                            const app = modelData.app;
+                                            if (app) {
+                                                try {
+                                                    if (app.runInTerminal && app.command) {
+                                                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(' '))}'`]);
+                                                    } else if (typeof app.execute === "function") {
+                                                        app.execute();
+                                                    }
+                                                } catch (e) {
+                                                    console.warn("[Win11StartMenu] Launch error:", e);
+                                                }
+                                                GlobalStates.startMenuOpen = false;
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 8
+                                            anchors.rightMargin: 8
+                                            spacing: 10
+
+                                            IconImage {
+                                                source: Quickshell.iconPath(modelData.app?.icon ?? "", "application-x-executable")
+                                                implicitSize: 24
+                                            }
+
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData.app?.name ?? ""
+                                                font.pixelSize: Appearance.font.pixelSize.normal
+                                                color: Appearance.colors.colOnLayer0
+                                                elide: Text.ElideRight
+                                            }
+
+                                            RippleButton {
+                                                visible: allAppsBtn.hovered || root.isAppPinned(modelData.app)
+                                                implicitWidth: 28
+                                                implicitHeight: 28
+                                                buttonRadius: Appearance.rounding.full
+                                                colBackground: "transparent"
+                                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                onClicked: {
+                                                    root.togglePinApp(modelData.app);
+                                                }
+                                                MaterialSymbol {
+                                                    anchors.centerIn: parent
+                                                    text: root.isAppPinned(modelData.app) ? "keep" : "keep_public"
+                                                    iconSize: 16
+                                                    color: root.isAppPinned(modelData.app) ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // ---------------- Main Body Flickable (Pinned, Folders, Recommended, Search) ----------------
                         Flickable {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.leftMargin: 20
                             Layout.rightMargin: 20
+                            visible: !(root.searchText.trim() === "" && root.showAllApps)
                             contentHeight: contentColumn.implicitHeight + 16
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
@@ -551,30 +836,36 @@ Scope {
                                             Layout.fillWidth: true
                                             implicitHeight: 48
                                             buttonRadius: 8
-                                            colBackground: (index === root.searchSelectedIndex) ? Appearance.colors.colLayer1Hover : "transparent"
+                                            colBackground: (index === root.searchSelectedIndex) ? Appearance.colors.colLayer1Hover : (modelData?.isCalculator ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.85) : "transparent")
                                             colBackgroundHover: Appearance.colors.colLayer1Hover
                                             onHoveredChanged: {
                                                 if (hovered) root.searchSelectedIndex = index;
                                             }
                                             altAction: (event) => {
-                                                root.contextMenuTargetApp = modelData;
-                                                const p = mapToItem(startMenuCard, event.x, event.y);
-                                                root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
-                                                root.appContextMenuOpen = true;
-                                                root.powerFlyoutOpen = false;
+                                                if (!modelData?.isCalculator) {
+                                                    root.contextMenuTargetApp = modelData;
+                                                    root.contextMenuTargetFile = null;
+                                                    const p = mapToItem(startMenuCard, event.x, event.y);
+                                                    root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                    root.appContextMenuOpen = true;
+                                                    root.powerFlyoutOpen = false;
+                                                }
                                             }
                                             onClicked: {
                                                 if (modelData) {
                                                     try {
-                                                        if (modelData.runInTerminal && modelData.command) {
-                                                             Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                        if (modelData.isCalculator) {
+                                                            modelData.execute();
+                                                        } else if (modelData.runInTerminal && modelData.command) {
+                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
+                                                            GlobalStates.startMenuOpen = false;
                                                         } else if (typeof modelData.execute === "function") {
                                                             modelData.execute();
+                                                            GlobalStates.startMenuOpen = false;
                                                         }
                                                     } catch (e) {
                                                         console.warn("[Win11StartMenu] Launch error:", e);
                                                     }
-                                                    GlobalStates.startMenuOpen = false;
                                                 }
                                             }
 
@@ -595,9 +886,25 @@ Scope {
                                                 anchors.rightMargin: 8
                                                 spacing: 12
 
-                                                IconImage {
-                                                    source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
-                                                    implicitSize: 30
+                                                Item {
+                                                    width: 30
+                                                    height: 30
+                                                    Layout.alignment: Qt.AlignVCenter
+
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        visible: modelData?.isCalculator === true
+                                                        text: "calculate"
+                                                        iconSize: 26
+                                                        color: Appearance.colors.colPrimary
+                                                    }
+
+                                                    IconImage {
+                                                        anchors.fill: parent
+                                                        visible: !modelData?.isCalculator
+                                                        source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
+                                                        implicitSize: 30
+                                                    }
                                                 }
 
                                                 ColumnLayout {
@@ -606,9 +913,9 @@ Scope {
                                                     StyledText {
                                                         Layout.fillWidth: true
                                                         text: modelData?.name ?? ""
-                                                        font.weight: Font.Medium
-                                                        font.pixelSize: Appearance.font.pixelSize.normal
-                                                        color: Appearance.colors.colOnLayer0
+                                                        font.weight: modelData?.isCalculator ? Font.Bold : Font.Medium
+                                                        font.pixelSize: modelData?.isCalculator ? Appearance.font.pixelSize.large : Appearance.font.pixelSize.normal
+                                                        color: modelData?.isCalculator ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                                                         elide: Text.ElideRight
                                                     }
                                                     StyledText {
@@ -621,7 +928,7 @@ Scope {
                                                 }
 
                                                 RippleButton {
-                                                    visible: searchResultBtn.hovered || root.isAppPinned(modelData)
+                                                    visible: !modelData?.isCalculator && (searchResultBtn.hovered || root.isAppPinned(modelData))
                                                     implicitWidth: 30
                                                     implicitHeight: 30
                                                     buttonRadius: Appearance.rounding.full
@@ -651,118 +958,6 @@ Scope {
                                         text: Translation.tr("No results found")
                                         font.pixelSize: Appearance.font.pixelSize.normal
                                         color: Appearance.colors.colOnLayer1
-                                    }
-                                }
-
-                                // State 2: ALL APPS LIST (when "All apps" is active)
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    visible: root.searchText.trim() === "" && root.showAllApps
-                                    spacing: 6
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        Layout.leftMargin: 6
-                                        Layout.rightMargin: 6
-
-                                        StyledText {
-                                            text: Translation.tr("All Applications")
-                                            font.weight: Font.DemiBold
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnLayer1
-                                        }
-
-                                        Item { Layout.fillWidth: true }
-
-                                        RippleButton {
-                                            implicitWidth: 72
-                                            implicitHeight: 26
-                                            buttonRadius: 6
-                                            colBackground: Appearance.colors.colLayer1
-                                            colBackgroundHover: Appearance.colors.colLayer1Hover
-                                            onClicked: root.showAllApps = false
-                                            RowLayout {
-                                                anchors.centerIn: parent
-                                                spacing: 4
-                                                MaterialSymbol { text: "arrow_back"; iconSize: 14; color: Appearance.colors.colPrimary }
-                                                StyledText { text: Translation.tr("Back"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
-                                            }
-                                        }
-                                    }
-
-                                    Repeater {
-                                        model: (root.showAllApps && root.searchText.trim() === "") ? AppSearch.list : []
-                                        delegate: RippleButton {
-                                            id: allAppsBtn
-                                            required property var modelData
-                                            Layout.fillWidth: true
-                                            implicitHeight: 40
-                                            buttonRadius: 6
-                                            colBackground: "transparent"
-                                            colBackgroundHover: Appearance.colors.colLayer1Hover
-                                            altAction: (event) => {
-                                                root.contextMenuTargetApp = modelData;
-                                                const p = mapToItem(startMenuCard, event.x, event.y);
-                                                root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
-                                                root.appContextMenuOpen = true;
-                                                root.powerFlyoutOpen = false;
-                                            }
-                                            onClicked: {
-                                                if (modelData) {
-                                                    try {
-                                                        if (modelData.runInTerminal && modelData.command) {
-                                                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(modelData.command.join(' '))}'`]);
-                                                        } else if (typeof modelData.execute === "function") {
-                                                            modelData.execute();
-                                                        }
-                                                    } catch (e) {
-                                                        console.warn("[Win11StartMenu] Launch error:", e);
-                                                    }
-                                                    GlobalStates.startMenuOpen = false;
-                                                }
-                                            }
-
-                                            RowLayout {
-                                                anchors.fill: parent
-                                                anchors.leftMargin: 8
-                                                anchors.rightMargin: 8
-                                                spacing: 10
-
-                                                IconImage {
-                                                    source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
-                                                    implicitSize: 24
-                                                }
-
-                                                StyledText {
-                                                    Layout.fillWidth: true
-                                                    text: modelData?.name ?? ""
-                                                    font.pixelSize: Appearance.font.pixelSize.normal
-                                                    color: Appearance.colors.colOnLayer0
-                                                    elide: Text.ElideRight
-                                                }
-
-                                                RippleButton {
-                                                    visible: allAppsBtn.hovered || root.isAppPinned(modelData)
-                                                    implicitWidth: 28
-                                                    implicitHeight: 28
-                                                    buttonRadius: Appearance.rounding.full
-                                                    colBackground: "transparent"
-                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
-                                                    onClicked: {
-                                                        root.togglePinApp(modelData);
-                                                    }
-                                                    MaterialSymbol {
-                                                        anchors.centerIn: parent
-                                                        text: root.isAppPinned(modelData) ? "keep" : "keep_public"
-                                                        iconSize: 16
-                                                        color: root.isAppPinned(modelData) ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                                                    }
-                                                    StyledToolTip {
-                                                        text: root.isAppPinned(modelData) ? Translation.tr("Unpin from Start") : Translation.tr("Pin to Start")
-                                                    }
-                                                }
-                                            }
-                                        }
                                     }
                                 }
 
@@ -1434,17 +1629,79 @@ Scope {
                                         }
                                     }
 
-                                    // --- Recommended Section ---
+                                    // --- Recommended Section (Apps + Real Recent Files) ---
                                     ColumnLayout {
                                         Layout.fillWidth: true
-                                        spacing: 6
+                                        spacing: 8
 
-                                        StyledText {
+                                        RowLayout {
+                                            Layout.fillWidth: true
                                             Layout.leftMargin: 6
-                                            text: Translation.tr("Recommended")
-                                            font.weight: Font.DemiBold
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnLayer1
+                                            Layout.rightMargin: 6
+                                            spacing: 6
+
+                                            StyledText {
+                                                text: Translation.tr("Recommended")
+                                                font.weight: Font.DemiBold
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                color: Appearance.colors.colOnLayer1
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            // Filter Chips [Todos] [Arquivos] [Apps]
+                                            RowLayout {
+                                                visible: Config.options?.dock?.startMenuShowRecentFiles ?? true
+                                                spacing: 4
+
+                                                RippleButton {
+                                                    implicitHeight: 24
+                                                    implicitWidth: 48
+                                                    buttonRadius: 5
+                                                    colBackground: root.recommendedTab === "all" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    onClicked: root.recommendedTab = "all"
+                                                    StyledText {
+                                                        anchors.centerIn: parent
+                                                        text: Translation.tr("All")
+                                                        font.pixelSize: 10
+                                                        font.weight: root.recommendedTab === "all" ? Font.Bold : Font.Normal
+                                                        color: root.recommendedTab === "all" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                                    }
+                                                }
+
+                                                RippleButton {
+                                                    implicitHeight: 24
+                                                    implicitWidth: 54
+                                                    buttonRadius: 5
+                                                    colBackground: root.recommendedTab === "files" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    onClicked: root.recommendedTab = "files"
+                                                    StyledText {
+                                                        anchors.centerIn: parent
+                                                        text: Translation.tr("Files")
+                                                        font.pixelSize: 10
+                                                        font.weight: root.recommendedTab === "files" ? Font.Bold : Font.Normal
+                                                        color: root.recommendedTab === "files" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                                    }
+                                                }
+
+                                                RippleButton {
+                                                    implicitHeight: 24
+                                                    implicitWidth: 48
+                                                    buttonRadius: 5
+                                                    colBackground: root.recommendedTab === "apps" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                                    onClicked: root.recommendedTab = "apps"
+                                                    StyledText {
+                                                        anchors.centerIn: parent
+                                                        text: Translation.tr("Apps")
+                                                        font.pixelSize: 10
+                                                        font.weight: root.recommendedTab === "apps" ? Font.Bold : Font.Normal
+                                                        color: root.recommendedTab === "apps" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         GridLayout {
@@ -1454,18 +1711,26 @@ Scope {
                                             rowSpacing: 4
 
                                             Repeater {
-                                                model: root.recommendedList
+                                                model: root.combinedRecommendedList
                                                 delegate: RippleButton {
+                                                    id: recItemBtn
                                                     required property var modelData
                                                     Layout.fillWidth: true
-                                                    implicitHeight: 46
+                                                    implicitHeight: 52
                                                     buttonRadius: 8
                                                     colBackground: "transparent"
                                                     colBackgroundHover: Appearance.colors.colLayer1Hover
                                                     altAction: (event) => {
-                                                        root.contextMenuTargetApp = modelData;
+                                                        if (modelData.isFile) {
+                                                            root.contextMenuTargetFile = modelData.fileObj;
+                                                            root.contextMenuTargetApp = null;
+                                                        } else {
+                                                            root.contextMenuTargetApp = modelData;
+                                                            root.contextMenuTargetFile = null;
+                                                        }
+                                                        root.activeFolder = null;
                                                         const p = mapToItem(startMenuCard, event.x, event.y);
-                                                        root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 180));
+                                                        root.contextMenuPos = Qt.point(Math.min(p.x, startMenuCard.width - 220), Math.min(p.y, startMenuCard.height - 240));
                                                         root.appContextMenuOpen = true;
                                                         root.powerFlyoutOpen = false;
                                                     }
@@ -1481,15 +1746,21 @@ Scope {
                                                         anchors.rightMargin: 10
                                                         spacing: 10
 
-                                                        IconImage {
-                                                            source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
-                                                            implicitSize: 28
+                                                        Item {
+                                                            width: 28
+                                                            height: 28
+                                                            Layout.alignment: Qt.AlignVCenter
+
+                                                            IconImage {
+                                                                anchors.fill: parent
+                                                                source: Quickshell.iconPath(modelData?.icon ?? "text-x-generic", "application-x-executable")
+                                                                implicitSize: 28
+                                                            }
                                                         }
 
                                                         ColumnLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 1
-
+                                                            spacing: 2
                                                             StyledText {
                                                                 Layout.fillWidth: true
                                                                 text: modelData?.name ?? ""
@@ -1498,7 +1769,6 @@ Scope {
                                                                 color: Appearance.colors.colOnLayer0
                                                                 elide: Text.ElideRight
                                                             }
-
                                                             StyledText {
                                                                 Layout.fillWidth: true
                                                                 text: modelData?.subtitle ?? ""
@@ -1510,6 +1780,15 @@ Scope {
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        StyledText {
+                                            visible: root.combinedRecommendedList.length === 0
+                                            Layout.alignment: Qt.AlignHCenter
+                                            Layout.topMargin: 14
+                                            text: Translation.tr("No recommended items yet")
+                                            font.pixelSize: Appearance.font.pixelSize.smaller
+                                            color: Appearance.colors.colOnLayer1
                                         }
                                     }
 
@@ -1871,13 +2150,13 @@ Scope {
                         }
                     }
 
-                    // App & Folder Context Menu (Right-click)
+                    // App, Folder & Recent File Context Menu (Right-click)
                     Rectangle {
                         id: appContextMenu
-                        visible: root.appContextMenuOpen && (root.contextMenuTargetApp !== null || root.activeFolder !== null)
+                        visible: root.appContextMenuOpen && (root.contextMenuTargetApp !== null || root.activeFolder !== null || root.contextMenuTargetFile !== null)
                         z: 220
                         x: Math.max(8, Math.min(root.contextMenuPos.x, startMenuCard.width - 220))
-                        y: Math.max(8, Math.min(root.contextMenuPos.y, startMenuCard.height - 210))
+                        y: Math.max(8, Math.min(root.contextMenuPos.y, startMenuCard.height - 240))
                         width: 210
                         height: appContextMenuCol.implicitHeight + 16
                         radius: Appearance.rounding.normal
@@ -1896,9 +2175,34 @@ Scope {
                             anchors.margins: 8
                             spacing: 2
 
-                            // 1. Header when targeting a Folder
+                            // 1. Header when targeting a Recent File
                             RowLayout {
-                                visible: root.contextMenuTargetApp === null && root.activeFolder !== null
+                                visible: root.contextMenuTargetFile !== null
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 4
+                                Layout.rightMargin: 4
+                                Layout.topMargin: 2
+                                Layout.bottomMargin: 4
+                                spacing: 8
+
+                                IconImage {
+                                    source: Quickshell.iconPath(root.contextMenuTargetFile?.icon ?? "text-x-generic", "text-x-generic")
+                                    implicitSize: 20
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: root.contextMenuTargetFile?.name ?? ""
+                                    font.weight: Font.DemiBold
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnLayer0
+                                    elide: Text.ElideRight
+                                }
+                            }
+
+                            // 2. Header when targeting a Folder
+                            RowLayout {
+                                visible: root.contextMenuTargetApp === null && root.contextMenuTargetFile === null && root.activeFolder !== null
                                 Layout.fillWidth: true
                                 Layout.leftMargin: 4
                                 Layout.rightMargin: 4
@@ -1922,7 +2226,7 @@ Scope {
                                 }
                             }
 
-                            // 2. Header when targeting an App
+                            // 3. Header when targeting an App
                             RowLayout {
                                 visible: root.contextMenuTargetApp !== null
                                 Layout.fillWidth: true
@@ -1951,6 +2255,83 @@ Scope {
                                 Layout.fillWidth: true
                                 height: 1
                                 color: Appearance.colors.colLayer0Border
+                            }
+
+                            // Recent File Actions
+                            RippleButton {
+                                visible: root.contextMenuTargetFile !== null
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const file = root.contextMenuTargetFile;
+                                    root.appContextMenuOpen = false;
+                                    if (file && typeof file.execute === "function") {
+                                        file.execute();
+                                        GlobalStates.startMenuOpen = false;
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "open_in_new"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Open"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                visible: root.contextMenuTargetFile !== null
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const file = root.contextMenuTargetFile;
+                                    root.appContextMenuOpen = false;
+                                    if (file?.path) {
+                                        Quickshell.clipboardText = file.path;
+                                        root.showCopiedToast(file.path);
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "content_copy"; iconSize: 16; color: Appearance.colors.colSecondary }
+                                    StyledText { text: Translation.tr("Copy path"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
+                            }
+
+                            RippleButton {
+                                visible: root.contextMenuTargetFile !== null
+                                Layout.fillWidth: true
+                                implicitHeight: 32
+                                buttonRadius: 6
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    const file = root.contextMenuTargetFile;
+                                    root.appContextMenuOpen = false;
+                                    if (file?.path) {
+                                        const dir = file.path.substring(0, file.path.lastIndexOf("/"));
+                                        Quickshell.execDetached(["xdg-open", dir]);
+                                        GlobalStates.startMenuOpen = false;
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+                                    MaterialSymbol { text: "folder_open"; iconSize: 16; color: Appearance.colors.colTertiary }
+                                    StyledText { text: Translation.tr("Open containing folder"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                }
                             }
 
                             // Folder Actions
@@ -2170,6 +2551,128 @@ Scope {
                                     MaterialSymbol { text: "terminal"; iconSize: 16; color: Appearance.colors.colTertiary }
                                     StyledText { text: Translation.tr("Run in Terminal"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
                                 }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // ALPHABET JUMP LIST MODAL (Windows 11 A-Z)
+                    // ==========================================
+                    Rectangle {
+                        id: alphabetJumpModal
+                        visible: root.alphabetJumpModalOpen
+                        z: 240
+                        anchors.centerIn: parent
+                        width: 320
+                        height: 320
+                        radius: Appearance.rounding.large
+                        color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.95)
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        StyledRectangularShadow { target: alphabetJumpModal }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 12
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                StyledText {
+                                    text: Translation.tr("Jump to letter")
+                                    font.weight: Font.Bold
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer0
+                                }
+                                Item { Layout.fillWidth: true }
+                                RippleButton {
+                                    implicitWidth: 28
+                                    implicitHeight: 28
+                                    buttonRadius: Appearance.rounding.full
+                                    colBackground: "transparent"
+                                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                                    onClicked: root.alphabetJumpModalOpen = false
+                                    MaterialSymbol { anchors.centerIn: parent; text: "close"; iconSize: 18; color: Appearance.colors.colOnLayer1 }
+                                }
+                            }
+
+                            GridLayout {
+                                id: alphabetGrid
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                columns: 6
+                                rowSpacing: 6
+                                columnSpacing: 6
+
+                                readonly property var availableLetters: Object.keys(root.alphabetLetterIndices || {})
+                                readonly property var allChars: ["#", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
+
+                                Repeater {
+                                    model: alphabetGrid.allChars
+                                    delegate: RippleButton {
+                                        required property string modelData
+                                        readonly property bool hasApps: alphabetGrid.availableLetters.includes(modelData)
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        buttonRadius: 6
+                                        enabled: hasApps
+                                        colBackground: hasApps ? Appearance.colors.colLayer1 : Qt.rgba(1, 1, 1, 0.02)
+                                        colBackgroundHover: Appearance.colors.colPrimary
+                                        onClicked: {
+                                            const idx = root.alphabetLetterIndices[modelData];
+                                            if (idx !== undefined && allAppsListView) {
+                                                allAppsListView.positionViewAtIndex(idx, ListView.Beginning);
+                                            }
+                                            root.alphabetJumpModalOpen = false;
+                                        }
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: modelData
+                                            font.weight: hasApps ? Font.Bold : Font.Normal
+                                            font.pixelSize: 13
+                                            color: hasApps ? Appearance.colors.colOnLayer0 : Appearance.colors.colLayer0Border
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ==========================================
+                    // COPIED TOAST NOTIFICATION
+                    // ==========================================
+                    Rectangle {
+                        id: copiedToast
+                        visible: root.copiedToastText !== ""
+                        z: 250
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 64
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        implicitWidth: toastRow.implicitWidth + 24
+                        implicitHeight: 36
+                        radius: 18
+                        color: Appearance.colors.colPrimary
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.2)
+
+                        RowLayout {
+                            id: toastRow
+                            anchors.centerIn: parent
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "check_circle"
+                                iconSize: 18
+                                color: Appearance.m3colors.m3onPrimary
+                            }
+                            StyledText {
+                                text: Translation.tr("Copied") + ": " + root.copiedToastText
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: Appearance.m3colors.m3onPrimary
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: 300
                             }
                         }
                     }
@@ -2576,36 +3079,154 @@ Scope {
                 // ==========================================
                 Rectangle {
                     id: companionCard
+                    visible: root.showCompanion
                     implicitWidth: 320
                     implicitHeight: 640
-                    radius: Appearance.rounding.large + 2
-                    color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.18)
+                    radius: Appearance.rounding.large + 4
+                    color: Appearance.colors.colLayer0
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
                     clip: true
-
-                    StyledRectangularShadow {
-                        target: companionCard
-                        visible: GlobalStates.startMenuOpen
-                    }
-
-                    // Top Subtle Highlight
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
-                        color: Qt.rgba(1, 1, 1, 0.12)
-                    }
 
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 0
 
+                        // Mini Media Player (Now Playing) if an active player is playing/available
+                        Item {
+                            id: miniMediaCard
+                            readonly property MprisPlayer activeMedia: MprisController.activePlayer
+                            readonly property bool hasMedia: (Config.options?.dock?.startMenuShowMedia ?? true) && activeMedia !== null && ((activeMedia.trackTitle && activeMedia.trackTitle.length > 0) || (activeMedia.trackArtist && activeMedia.trackArtist.length > 0))
+                            visible: hasMedia
+                            Layout.fillWidth: true
+                            implicitHeight: hasMedia ? 72 : 0
+                            Layout.topMargin: 12
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.medium
+                                color: Appearance.colors.colLayer1
+                                border.width: 1
+                                border.color: Appearance.colors.colLayer0Border
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    // Track Art / Music Icon
+                                    Rectangle {
+                                        width: 44
+                                        height: 44
+                                        radius: 8
+                                        color: Appearance.colors.colPrimaryContainer
+                                        clip: true
+
+                                        Image {
+                                            id: trackArtImg
+                                            anchors.fill: parent
+                                            source: miniMediaCard.activeMedia?.trackArtUrl ?? ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            visible: status === Image.Ready && source != ""
+                                        }
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            visible: !trackArtImg.visible
+                                            text: "music_note"
+                                            iconSize: 22
+                                            color: Appearance.colors.colPrimary
+                                        }
+                                    }
+
+                                    // Title & Artist
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: miniMediaCard.activeMedia?.trackTitle || Translation.tr("Unknown Title")
+                                            font.weight: Font.DemiBold
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            color: Appearance.colors.colOnLayer0
+                                            elide: Text.ElideRight
+                                        }
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: miniMediaCard.activeMedia?.trackArtist || Translation.tr("Unknown Artist")
+                                            font.pixelSize: Appearance.font.pixelSize.smallest
+                                            color: Appearance.colors.colOnLayer1
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    // Media Controls (Prev, Play/Pause, Next)
+                                    RowLayout {
+                                        spacing: 2
+
+                                        RippleButton {
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            buttonRadius: 14
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (miniMediaCard.activeMedia) {
+                                                    miniMediaCard.activeMedia.previous();
+                                                }
+                                            }
+                                            MaterialSymbol { anchors.centerIn: parent; text: "skip_previous"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        }
+
+                                        RippleButton {
+                                            implicitWidth: 32
+                                            implicitHeight: 32
+                                            buttonRadius: 16
+                                            colBackground: Appearance.colors.colPrimary
+                                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                                            onClicked: {
+                                                if (miniMediaCard.activeMedia) {
+                                                    if (typeof miniMediaCard.activeMedia.togglePlaying === "function") {
+                                                        miniMediaCard.activeMedia.togglePlaying();
+                                                    } else if (typeof miniMediaCard.activeMedia.playPause === "function") {
+                                                        miniMediaCard.activeMedia.playPause();
+                                                    }
+                                                }
+                                            }
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: (miniMediaCard.activeMedia?.isPlaying || miniMediaCard.activeMedia?.playbackState === MprisPlaybackState.Playing) ? "pause" : "play_arrow"
+                                                iconSize: 20
+                                                color: Appearance.m3colors.m3onPrimary
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            implicitWidth: 28
+                                            implicitHeight: 28
+                                            buttonRadius: 14
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: {
+                                                if (miniMediaCard.activeMedia) {
+                                                    miniMediaCard.activeMedia.next();
+                                                }
+                                            }
+                                            MaterialSymbol { anchors.centerIn: parent; text: "skip_next"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Phone Status Top Card
                         Item {
                             Layout.fillWidth: true
-                            implicitHeight: 155
+                            implicitHeight: visible ? 140 : 0
+                            visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
 
                             ColumnLayout {
                                 anchors.centerIn: parent
@@ -2615,7 +3236,7 @@ Scope {
                                 RippleButton {
                                     Layout.alignment: Qt.AlignHCenter
                                     implicitWidth: 44
-                                    implicitHeight: 66
+                                    implicitHeight: 62
                                     buttonRadius: 10
                                     colBackground: "transparent"
                                     colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -2627,7 +3248,7 @@ Scope {
                                     Rectangle {
                                         anchors.centerIn: parent
                                         width: 36
-                                        height: 58
+                                        height: 54
                                         radius: 8
                                         color: root.kdeConnected ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
                                         border.width: 2
@@ -2720,14 +3341,15 @@ Scope {
                         // Quick Action Buttons
                         ColumnLayout {
                             Layout.fillWidth: true
-                            Layout.leftMargin: 16
-                            Layout.rightMargin: 16
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
+                            visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
                             spacing: 6
 
                             // KDE Connect SMS
                             RippleButton {
                                 Layout.fillWidth: true
-                                implicitHeight: 38
+                                implicitHeight: 36
                                 buttonRadius: 8
                                 colBackground: Appearance.colors.colLayer1
                                 colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -2748,7 +3370,7 @@ Scope {
                             // Ring Phone / Find My Phone
                             RippleButton {
                                 Layout.fillWidth: true
-                                implicitHeight: 38
+                                implicitHeight: 36
                                 buttonRadius: 8
                                 colBackground: Appearance.colors.colLayer1
                                 colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -2769,8 +3391,9 @@ Scope {
                         // Recent Phone Notifications Header
                         StyledText {
                             Layout.leftMargin: 18
-                            Layout.topMargin: 14
+                            Layout.topMargin: 12
                             Layout.bottomMargin: 4
+                            visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
                             text: Translation.tr("Phone Notifications")
                             font.weight: Font.DemiBold
                             font.pixelSize: Appearance.font.pixelSize.small
@@ -2783,6 +3406,7 @@ Scope {
                             Layout.fillHeight: true
                             Layout.leftMargin: 14
                             Layout.rightMargin: 14
+                            visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
                             contentHeight: notifCol.implicitHeight
                             clip: true
 
@@ -2796,7 +3420,7 @@ Scope {
                                     delegate: RippleButton {
                                         required property var modelData
                                         Layout.fillWidth: true
-                                        implicitHeight: 46
+                                        implicitHeight: 44
                                         buttonRadius: 8
                                         colBackground: "transparent"
                                         colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -2849,7 +3473,7 @@ Scope {
                                 StyledText {
                                     visible: (root.phoneNotifications.length === 0) && ((Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).length === 0)
                                     Layout.alignment: Qt.AlignHCenter
-                                    Layout.topMargin: 20
+                                    Layout.topMargin: 16
                                     text: root.kdeConnected ? Translation.tr("No phone notifications") : Translation.tr("Connect phone via KDE Connect")
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     color: Appearance.colors.colOnLayer1
@@ -2858,33 +3482,18 @@ Scope {
                         }
 
                         // Bottom Footer: KDE Connect App button
-                        Rectangle {
+                        Item {
                             id: companionFooterBar
                             Layout.fillWidth: true
                             implicitHeight: 56
-                            color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
-                            border.width: 1
-                            border.color: Appearance.colors.colLayer0Border
-                            radius: companionCard.radius
 
-                            // Square off the top corners, keeping only the
-                            // bottom two rounded to match companionCard's clip
+                            // 1px top divider line
                             Rectangle {
                                 anchors.top: parent.top
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                height: parent.radius
-                                color: parent.color
-                            }
-
-                            // Re-draw the top border since the mask above
-                            // covers it
-                            Rectangle {
-                                anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                height: parent.border.width
-                                color: parent.border.color
+                                height: 1
+                                color: Appearance.colors.colLayer0Border
                             }
 
                             RowLayout {

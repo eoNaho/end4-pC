@@ -541,7 +541,12 @@ Singleton {
                 property bool showContextMenu: true
                 property list<string> pinnedApps: [ // IDs of pinned entries
                     "org.kde.dolphin", "kitty",]
-                property list<string> ignoredAppRegexes: []
+                property bool startMenuCentered: true
+                property bool startMenuCompanion: true
+                property bool startMenuShowMedia: true
+                property bool startMenuShowKdeConnect: true
+                property bool startMenuShowRecentFiles: true
+                property bool startMenuEnableCalculator: true
             }
 
             property JsonObject interactions: JsonObject {
