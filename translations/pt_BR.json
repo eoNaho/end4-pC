@@ -1080,5 +1080,10 @@
     "Media Player in Companion Panel": "Player de Mídia no Painel Lateral",
     "Phone & KDE Connect in Companion Panel": "Telefone & KDE Connect no Painel Lateral",
     "Recent Files in Recommended": "Arquivos Recentes nos Recomendados",
-    "Enable Search Calculator": "Calculadora e Conversor na Busca"
+    "Enable Search Calculator": "Calculadora e Conversor na Busca",
+    "Phone Notifications": "Notificações do Celular",
+    "No phone notifications": "Nenhuma notificação",
+    "Connect phone via KDE Connect": "Conecte o celular via KDE Connect",
+    "Clear notifications": "Limpar notificações",
+    "Dismiss": "Dispensar"
 }

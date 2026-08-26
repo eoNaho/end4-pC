@@ -3389,15 +3389,48 @@ Scope {
                         }
 
                         // Recent Phone Notifications Header
-                        StyledText {
+                        RowLayout {
+                            Layout.fillWidth: true
                             Layout.leftMargin: 18
+                            Layout.rightMargin: 14
                             Layout.topMargin: 12
                             Layout.bottomMargin: 4
                             visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
-                            text: Translation.tr("Phone Notifications")
-                            font.weight: Font.DemiBold
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnLayer1
+
+                            StyledText {
+                                text: Translation.tr("Phone Notifications")
+                                font.weight: Font.DemiBold
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnLayer1
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            RippleButton {
+                                readonly property int notifCount: root.phoneNotifications.length > 0 ? root.phoneNotifications.length : (Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).length
+                                visible: notifCount > 0
+                                implicitHeight: 22
+                                implicitWidth: 54
+                                buttonRadius: 4
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    root.phoneNotifications = [];
+                                    const kdeNotifs = (Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect")));
+                                    for (let i = 0; i < kdeNotifs.length; i++) {
+                                        if (kdeNotifs[i].notificationId !== undefined) {
+                                            Notifications.discardNotification(kdeNotifs[i].notificationId);
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 3
+                                    MaterialSymbol { text: "delete_sweep"; iconSize: 13; color: Appearance.colors.colOnLayer1 }
+                                    StyledText { text: Translation.tr("Clear"); font.pixelSize: 10; color: Appearance.colors.colOnLayer1 }
+                                }
+                                StyledToolTip { text: Translation.tr("Clear notifications") }
+                            }
                         }
 
                         // Recent Phone Notifications List
@@ -3416,11 +3449,13 @@ Scope {
                                 spacing: 4
 
                                 Repeater {
-                                    model: root.phoneNotifications.length > 0 ? root.phoneNotifications : (Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).slice(0, 4)
+                                    model: root.phoneNotifications.length > 0 ? root.phoneNotifications : (Notifications.list || []).filter(n => n && n.appName && (n.appName.toLowerCase().includes("kde") || n.appName.toLowerCase().includes("connect"))).slice(0, 5)
                                     delegate: RippleButton {
+                                        id: notifItemBtn
                                         required property var modelData
+                                        required property int index
                                         Layout.fillWidth: true
-                                        implicitHeight: 44
+                                        implicitHeight: 46
                                         buttonRadius: 8
                                         colBackground: "transparent"
                                         colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -3465,6 +3500,31 @@ Scope {
                                                     color: Appearance.colors.colOnLayer1
                                                     elide: Text.ElideRight
                                                 }
+                                            }
+
+                                            // Dismiss button (visible on hover)
+                                            RippleButton {
+                                                visible: notifItemBtn.hovered
+                                                implicitWidth: 22
+                                                implicitHeight: 22
+                                                buttonRadius: 11
+                                                colBackground: "transparent"
+                                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                                onClicked: {
+                                                    if (modelData?.notificationId !== undefined) {
+                                                        Notifications.discardNotification(modelData.notificationId);
+                                                    }
+                                                    if (root.phoneNotifications && root.phoneNotifications.length > 0) {
+                                                        root.phoneNotifications = root.phoneNotifications.filter((_, idx) => idx !== index);
+                                                    }
+                                                }
+                                                MaterialSymbol {
+                                                    anchors.centerIn: parent
+                                                    text: "close"
+                                                    iconSize: 14
+                                                    color: Appearance.colors.colOnLayer1
+                                                }
+                                                StyledToolTip { text: Translation.tr("Dismiss") }
                                             }
                                         }
                                     }
