@@ -74,16 +74,24 @@ Item {
         onExited: { root.artDownloaded = true }
     }
 
+    readonly property bool isDynamicIsland: (Config.options.bar.media.dynamicIsland ?? true) && !root.vertical && !root.isMaterial
+
     Layout.fillHeight: true
     implicitWidth: vertical 
         ? Appearance.sizes.verticalBarWidth 
         : (isMaterial 
             ? materialRow.implicitWidth 
-            : Math.max(
-                Config.options.bar.media.minWidth,
-                Math.min(rowLayout.implicitWidth + 8, Config.options.bar.media.maxWidth)
-            ))
+            : (root.isDynamicIsland
+                ? (root.hasTrack ? Math.min(rowLayout.implicitWidth + 12, Config.options.bar.media.maxWidth ?? 280) : (Config.options.bar.media.alwaysVisible ? 32 : 0))
+                : Math.max(
+                    Config.options.bar.media.minWidth,
+                    Math.min(rowLayout.implicitWidth + 8, Config.options.bar.media.maxWidth)
+                )))
     implicitHeight: vertical ? (isMaterial ? 32 : mediaCircProg.implicitHeight) : Appearance.sizes.barHeight
+
+    Behavior on implicitWidth {
+        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+    }
 
     Timer {
         running: activePlayer?.playbackState == MprisPlaybackState.Playing
@@ -101,6 +109,12 @@ Item {
             else if (event.button === Qt.BackButton)   activePlayer?.previous()
             else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton) activePlayer?.next()
             else if (event.button === Qt.LeftButton)   GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen
+        }
+        onWheel: (wheel) => {
+            if (root.activePlayer) {
+                const step = wheel.angleDelta.y > 0 ? 0.05 : -0.05
+                root.activePlayer.volume = Math.max(0, Math.min(1, (root.activePlayer.volume || 1) + step))
+            }
         }
     }
 
@@ -149,84 +163,134 @@ Item {
         }
     }
 
-    // Horizontal default
+    // Horizontal default & Dynamic Island
     Loader {
         id: rowLayout
         active: !root.vertical && !root.isMaterial
-        visible: active
+        visible: active && (root.hasTrack || Config.options.bar.media.alwaysVisible)
         anchors.fill: parent
-        sourceComponent: ColumnLayout {
-            spacing: 0
+        sourceComponent: RowLayout {
+            id: dynamicIslandRow
+            spacing: 8
+            anchors.fill: parent
 
-            RowLayout {
-                spacing: 4
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+            // 1. Equalizer Wave
+            Row {
+                id: miniEqualizer
+                spacing: 2.5
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 6
+                property var barHeights: [6, 12, 16, 9]
 
-                ClippedFilledCircularProgress {
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.leftMargin: 3
-                    implicitSize: 20
-                    lineWidth: Appearance.rounding.unsharpen
-                    value: root.activePlayer?.position / root.activePlayer?.length
-                    colPrimary: Appearance.colors.colOnSecondaryContainer
-                    enableAnimation: false
-                    Item {
-                        anchors.centerIn: parent
-                        width: 20
-                        height: 20
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            fill: 1
-                            text: root.activePlayer?.isPlaying ? "pause" : "music_note"
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: Appearance.m3colors.m3onSecondaryContainer
-                        }
+                Timer {
+                    running: root.isPlaying
+                    interval: 140
+                    repeat: true
+                    onTriggered: {
+                        miniEqualizer.barHeights = [
+                            5 + Math.random() * 13,
+                            6 + Math.random() * 15,
+                            7 + Math.random() * 16,
+                            5 + Math.random() * 12
+                        ]
                     }
                 }
 
-                ColumnLayout {
-                    spacing: 0
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-
-                    StyledText {
-                        visible: Config.options.bar.verbose
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        elide: Text.ElideRight
-                        color: Appearance.colors.colOnLayer1
-                        text: Config.options.bar.media.onlyTitle
-                            ? root.cleanedTitle
-                            : `${root.cleanedTitle}${root.activePlayer?.trackArtist ? ' • ' + root.activePlayer.trackArtist : ''}`
+                Repeater {
+                    model: 4
+                    Rectangle {
+                        required property int index
+                        width: 3
+                        radius: 1.5
+                        height: root.isPlaying ? (miniEqualizer.barHeights[index] ?? 6) : 4
+                        color: Appearance.colors.colPrimary
+                        Behavior on height {
+                            NumberAnimation { duration: 130; easing.type: Easing.OutQuad }
+                        }
                     }
                 }
             }
 
-            // Thin progress bar — only visible when there is a valid track & position
-            Rectangle {
+            // 2. Track Title & Artist (Clean Text with Elide)
+            ColumnLayout {
+                spacing: -2
                 Layout.fillWidth: true
-                Layout.leftMargin: 3
-                Layout.rightMargin: 3
-                visible: root.hasTrack && (root.activePlayer?.length ?? 0) > 0
-                implicitHeight: 2
-                radius: 1
-                color: Appearance.colors.colLayer2
+                Layout.alignment: Qt.AlignVCenter
+                Layout.maximumWidth: (Config.options.bar.media.maxWidth ?? 280) - 90
 
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.cleanedTitle
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer0
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    visible: !Config.options.bar.media.onlyTitle && root.trackArtist.length > 0
+                    Layout.fillWidth: true
+                    text: root.trackArtist
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
+            }
+
+            // 3. Mini Controls & Album Art
+            RowLayout {
+                spacing: 4
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: 6
+
+                // Play / Pause Button
+                RippleButton {
+                    implicitWidth: 26
+                    implicitHeight: 26
+                    buttonRadius: 13
+                    colBackground: root.isPlaying ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                    colBackgroundHover: root.isPlaying ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                    onClicked: root.activePlayer?.togglePlaying()
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: root.isPlaying ? "pause" : "play_arrow"
+                        iconSize: 15
+                        fill: 1
+                        color: root.isPlaying ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                    }
+                }
+
+                // Next Track Button
+                RippleButton {
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    buttonRadius: 12
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: root.activePlayer?.next()
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "skip_next"
+                        iconSize: 15
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
+
+                // Album Art (if available)
                 Rectangle {
-                    readonly property real progress: root.activePlayer
-                        ? Math.max(0, Math.min(1, root.activePlayer.position / root.activePlayer.length))
-                        : 0
-                    width: parent.width * progress
-                    height: parent.height
-                    radius: parent.radius
-                    color: Appearance.colors.colPrimary
+                    visible: root.displayedArtFilePath !== ""
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    radius: 6
+                    color: "transparent"
+                    clip: true
 
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: Config.options.resources.updateInterval
-                            easing.type: Easing.Linear
-                        }
+                    StyledImage {
+                        anchors.fill: parent
+                        source: root.displayedArtFilePath
+                        fillMode: Image.PreserveAspectCrop
                     }
                 }
             }

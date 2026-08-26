@@ -494,6 +494,7 @@ Singleton {
                 property JsonObject media: JsonObject {
                     property string preferredPlayer: ""
                     property bool alwaysVisible: false
+                    property bool dynamicIsland: true
                     property bool onlyTitle: false
                     property int maxWidth: 280
                     property int minWidth: 100

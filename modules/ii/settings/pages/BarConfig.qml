@@ -661,6 +661,11 @@ ContentPage {
                     onCheckedChanged: { Config.options.bar.media.alwaysVisible = checked; }
                 }
                 ConfigSwitch {
+                    buttonIcon: "music_cast"; text: Translation.tr("Dynamic Island Media Player")
+                    checked: Config.options.bar.media.dynamicIsland ?? true
+                    onCheckedChanged: { Config.options.bar.media.dynamicIsland = checked; }
+                }
+                ConfigSwitch {
                     buttonIcon: "titlecase"; text: Translation.tr("Show only title")
                     checked: Config.options.bar.media.onlyTitle
                     onCheckedChanged: { Config.options.bar.media.onlyTitle = checked; }
