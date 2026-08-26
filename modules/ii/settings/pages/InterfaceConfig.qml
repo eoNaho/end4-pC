@@ -677,11 +677,31 @@ ContentPage {
                         onCheckedChanged: { Config.options.dock.startMenuShowMedia = checked }
                     }
                     ConfigSwitch {
+                        buttonIcon: "partly_cloudy_day"
+                        enabled: Config.options.dock.startMenuCompanion ?? true
+                        text: Translation.tr("Weather Widget in Companion Panel")
+                        checked: Config.options.dock.startMenuShowWeather ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowWeather = checked }
+                    }
+                    ConfigSwitch {
                         buttonIcon: "smartphone"
                         enabled: Config.options.dock.startMenuCompanion ?? true
                         text: Translation.tr("Phone & KDE Connect in Companion Panel")
                         checked: Config.options.dock.startMenuShowKdeConnect ?? true
                         onCheckedChanged: { Config.options.dock.startMenuShowKdeConnect = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "memory"
+                        enabled: Config.options.dock.startMenuCompanion ?? true
+                        text: Translation.tr("System Resources in Companion Panel")
+                        checked: Config.options.dock.startMenuShowSystemResources ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowSystemResources = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "folder_special"
+                        text: Translation.tr("Quick Folder Shortcuts in Footer")
+                        checked: Config.options.dock.startMenuShowQuickFolders ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowQuickFolders = checked }
                     }
                     ConfigSwitch {
                         buttonIcon: "description"
@@ -694,6 +714,12 @@ ContentPage {
                         text: Translation.tr("Enable Search Calculator")
                         checked: Config.options.dock.startMenuEnableCalculator ?? true
                         onCheckedChanged: { Config.options.dock.startMenuEnableCalculator = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "blur_on"
+                        text: Translation.tr("Translucent Acrylic / Mica Background")
+                        checked: Config.options.dock.startMenuAcrylicBackground ?? false
+                        onCheckedChanged: { Config.options.dock.startMenuAcrylicBackground = checked }
                     }
                 }
             }

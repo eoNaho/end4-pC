@@ -544,9 +544,13 @@ Singleton {
                 property bool startMenuCentered: true
                 property bool startMenuCompanion: true
                 property bool startMenuShowMedia: true
+                property bool startMenuShowWeather: true
                 property bool startMenuShowKdeConnect: true
                 property bool startMenuShowRecentFiles: true
                 property bool startMenuEnableCalculator: true
+                property bool startMenuShowQuickFolders: true
+                property bool startMenuAcrylicBackground: false
+                property bool startMenuShowSystemResources: true
             }
 
             property JsonObject interactions: JsonObject {

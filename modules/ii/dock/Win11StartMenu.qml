@@ -82,11 +82,23 @@ Scope {
         property var dragDropTargetFolder: null
         property var dragDropTargetApp: null
         property string recommendedTab: "all"
+        property string searchFilterTab: "all" // "all", "apps", "files", "settings"
         property bool alphabetJumpModalOpen: false
         property string copiedToastText: ""
 
         readonly property bool startMenuCentered: Config.options?.dock?.startMenuCentered ?? true
         readonly property bool showCompanion: Config.options?.dock?.startMenuCompanion ?? true
+        readonly property bool acrylicBg: Config.options?.dock?.startMenuAcrylicBackground ?? false
+
+        readonly property var settingsShortcuts: [
+            { name: Translation.tr("Wallpaper & Style"), comment: Translation.tr("Settings"), icon: "wallpaper", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open appearance || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Interface & Start Menu"), comment: Translation.tr("Settings"), icon: "dashboard", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open interface || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Bluetooth"), comment: Translation.tr("Settings"), icon: "bluetooth", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open bluetooth || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Wi-Fi & Network"), comment: Translation.tr("Settings"), icon: "wifi", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open network || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Audio & Sound"), comment: Translation.tr("Settings"), icon: "volume_up", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open audio || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Power & Battery"), comment: Translation.tr("Settings"), icon: "battery_charging_full", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open power || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } },
+            { name: Translation.tr("Displays"), comment: Translation.tr("Settings"), icon: "monitor", isSetting: true, execute: () => { Quickshell.execDetached(["bash", "-c", "quickshell ipc call settings open displays || quickshell ipc call settings toggle"]); GlobalStates.startMenuOpen = false; } }
+        ]
 
         function isAppPinned(app) {
             if (!app) return false;
@@ -160,21 +172,53 @@ Scope {
             if (query === "") return [];
             let list = [];
             
-            if (Config.options?.dock?.startMenuEnableCalculator ?? true) {
+            // 1. Math calculation (in "all")
+            if (root.searchFilterTab === "all" && (Config.options?.dock?.startMenuEnableCalculator ?? true)) {
                 const mathRes = evaluateMath(query);
                 if (mathRes) {
                     list.push(mathRes);
                 }
             }
 
-            try {
-                const results = AppSearch.fuzzyQuery(query);
-                if (results && Array.isArray(results)) {
-                    list = list.concat(results.filter(item => item !== null && item !== undefined).slice(0, 15));
+            const qLower = query.toLowerCase();
+
+            // 2. Apps
+            if (root.searchFilterTab === "all" || root.searchFilterTab === "apps") {
+                try {
+                    const results = AppSearch.fuzzyQuery(query);
+                    if (results && Array.isArray(results)) {
+                        list = list.concat(results.filter(item => item !== null && item !== undefined).slice(0, (root.searchFilterTab === "apps" ? 20 : 8)));
+                    }
+                } catch (err) {
+                    console.warn("[Win11StartMenu] Search error:", err);
                 }
-            } catch (err) {
-                console.warn("[Win11StartMenu] Search error:", err);
             }
+
+            // 3. Settings
+            if (root.searchFilterTab === "all" || root.searchFilterTab === "settings") {
+                const matchingSettings = root.settingsShortcuts.filter(s => s && (s.name.toLowerCase().includes(qLower) || s.comment.toLowerCase().includes(qLower)));
+                list = list.concat(matchingSettings.slice(0, 4));
+            }
+
+            // 4. Recent Files
+            if (root.searchFilterTab === "all" || root.searchFilterTab === "files") {
+                const matchingFiles = (RecentFiles.list || []).filter(f => f && (f.name.toLowerCase().includes(qLower) || f.displayDir.toLowerCase().includes(qLower)));
+                for (let i = 0; i < matchingFiles.length && list.length < (root.searchFilterTab === "files" ? 20 : 12); i++) {
+                    const f = matchingFiles[i];
+                    list.push({
+                        isFile: true,
+                        fileObj: f,
+                        name: f.name,
+                        comment: f.displayDir,
+                        icon: f.icon,
+                        execute: () => {
+                            f.execute();
+                            GlobalStates.startMenuOpen = false;
+                        }
+                    });
+                }
+            }
+
             return list;
         }
 
@@ -484,7 +528,7 @@ Scope {
                     implicitWidth: 600
                     implicitHeight: 640
                     radius: Appearance.rounding.large + 4
-                    color: Appearance.colors.colLayer0
+                    color: root.acrylicBg ? ColorUtils.transparentize(Appearance.colors.colLayer0, 0.25) : Appearance.colors.colLayer0
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
                     clip: true
@@ -819,12 +863,75 @@ Scope {
                                     visible: root.searchText.trim() !== ""
                                     spacing: 6
 
-                                    StyledText {
+                                    // Search Filter Tabs [Todos] [Apps] [Arquivos] [Configurações]
+                                    RowLayout {
                                         Layout.leftMargin: 6
-                                        text: Translation.tr("Search Results")
-                                        font.weight: Font.DemiBold
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        color: Appearance.colors.colOnLayer1
+                                        Layout.bottomMargin: 4
+                                        spacing: 4
+
+                                        RippleButton {
+                                            implicitHeight: 24
+                                            implicitWidth: 48
+                                            buttonRadius: 5
+                                            colBackground: root.searchFilterTab === "all" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.searchFilterTab = "all"
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: Translation.tr("All")
+                                                font.pixelSize: 10
+                                                font.weight: root.searchFilterTab === "all" ? Font.Bold : Font.Normal
+                                                color: root.searchFilterTab === "all" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            implicitHeight: 24
+                                            implicitWidth: 48
+                                            buttonRadius: 5
+                                            colBackground: root.searchFilterTab === "apps" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.searchFilterTab = "apps"
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: Translation.tr("Apps")
+                                                font.pixelSize: 10
+                                                font.weight: root.searchFilterTab === "apps" ? Font.Bold : Font.Normal
+                                                color: root.searchFilterTab === "apps" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            implicitHeight: 24
+                                            implicitWidth: 54
+                                            buttonRadius: 5
+                                            colBackground: root.searchFilterTab === "files" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.searchFilterTab = "files"
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: Translation.tr("Files")
+                                                font.pixelSize: 10
+                                                font.weight: root.searchFilterTab === "files" ? Font.Bold : Font.Normal
+                                                color: root.searchFilterTab === "files" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            implicitHeight: 24
+                                            implicitWidth: 86
+                                            buttonRadius: 5
+                                            colBackground: root.searchFilterTab === "settings" ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+                                            colBackgroundHover: Appearance.colors.colLayer1Hover
+                                            onClicked: root.searchFilterTab = "settings"
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: Translation.tr("Settings")
+                                                font.pixelSize: 10
+                                                font.weight: root.searchFilterTab === "settings" ? Font.Bold : Font.Normal
+                                                color: root.searchFilterTab === "settings" ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+                                            }
+                                        }
                                     }
 
                                     Repeater {
@@ -842,7 +949,7 @@ Scope {
                                                 if (hovered) root.searchSelectedIndex = index;
                                             }
                                             altAction: (event) => {
-                                                if (!modelData?.isCalculator) {
+                                                if (!modelData?.isCalculator && !modelData?.isSetting) {
                                                     root.contextMenuTargetApp = modelData;
                                                     root.contextMenuTargetFile = null;
                                                     const p = mapToItem(startMenuCard, event.x, event.y);
@@ -899,9 +1006,17 @@ Scope {
                                                         color: Appearance.colors.colPrimary
                                                     }
 
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        visible: modelData?.isSetting === true
+                                                        text: modelData?.icon ?? "settings"
+                                                        iconSize: 22
+                                                        color: Appearance.colors.colPrimary
+                                                    }
+
                                                     IconImage {
                                                         anchors.fill: parent
-                                                        visible: !modelData?.isCalculator
+                                                        visible: !modelData?.isCalculator && !modelData?.isSetting
                                                         source: Quickshell.iconPath(modelData?.icon ?? "", "application-x-executable")
                                                         implicitSize: 30
                                                     }
@@ -1340,10 +1455,10 @@ Scope {
                                                     id: folderBg
                                                     anchors.fill: parent
                                                     radius: 8
-                                                    color: folderMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7) : "transparent")
-                                                    border.width: isHoveredByDrag ? 2 : 0
+                                                    color: folderMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (folderCardBtn.isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7) : "transparent")
+                                                    border.width: folderCardBtn.isHoveredByDrag ? 2 : 0
                                                     border.color: Appearance.colors.colPrimary
-                                                    scale: isHoveredByDrag ? 1.08 : (folderMouseArea.pressed ? 0.95 : 1.0)
+                                                    scale: folderCardBtn.isHoveredByDrag ? 1.08 : (folderMouseArea.pressed ? 0.95 : 1.0)
                                                     Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                                                     Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -1512,10 +1627,10 @@ Scope {
                                                     id: appCardBg
                                                     anchors.fill: parent
                                                     radius: 8
-                                                    color: appMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colSecondary, 0.7) : "transparent")
-                                                    border.width: isHoveredByDrag ? 2 : 0
+                                                    color: appMouseArea.containsMouse ? Appearance.colors.colLayer1Hover : (pinnedAppItem.isHoveredByDrag ? ColorUtils.transparentize(Appearance.colors.colSecondary, 0.7) : "transparent")
+                                                    border.width: pinnedAppItem.isHoveredByDrag ? 2 : 0
                                                     border.color: Appearance.colors.colSecondary
-                                                    scale: isHoveredByDrag ? 1.08 : (appMouseArea.pressed ? 0.95 : 1.0)
+                                                    scale: pinnedAppItem.isHoveredByDrag ? 1.08 : (appMouseArea.pressed ? 0.95 : 1.0)
                                                     opacity: (root.isDraggingApp && root.draggingApp === modelData) ? 0.3 : 1.0
                                                     Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                                                     Behavior on color { ColorAnimation { duration: 100 } }
@@ -1867,7 +1982,7 @@ Scope {
                             id: footerBar
                             Layout.fillWidth: true
                             implicitHeight: 56
-                            color: ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
+                            color: root.acrylicBg ? ColorUtils.transparentize(Appearance.colors.colLayer1, 0.4) : ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colLayer1, 0.4)
                             border.width: 1
                             border.color: Appearance.colors.colLayer0Border
                             radius: startMenuCard.radius
@@ -1967,6 +2082,102 @@ Scope {
                                 }
 
                                 Item { Layout.fillWidth: true }
+
+                                // Quick Folder Shortcuts (Home, Downloads, Documents, Pictures, Terminal, Settings)
+                                RowLayout {
+                                    visible: Config.options?.dock?.startMenuShowQuickFolders ?? true
+                                    spacing: 2
+
+                                    // Home Folder
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["bash", "-c", "dolphin ~ || xdg-open ~"]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "home"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Home") }
+                                    }
+
+                                    // Downloads Folder
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["bash", "-c", "dolphin ~/Downloads || xdg-open ~/Downloads"]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "download"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Downloads") }
+                                    }
+
+                                    // Documents Folder
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["bash", "-c", "dolphin ~/Documents || xdg-open ~/Documents"]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "description"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Documents") }
+                                    }
+
+                                    // Pictures Folder
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["bash", "-c", "dolphin ~/Pictures || xdg-open ~/Pictures"]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "photo_library"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Pictures") }
+                                    }
+
+                                    // Terminal
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["bash", "-c", Config.options.apps.terminal]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "terminal"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Terminal") }
+                                    }
+
+                                    // Settings
+                                    RippleButton {
+                                        implicitWidth: 32
+                                        implicitHeight: 32
+                                        buttonRadius: 6
+                                        colBackground: "transparent"
+                                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            GlobalStates.settingsOpen = true;
+                                            GlobalStates.startMenuOpen = false;
+                                        }
+                                        MaterialSymbol { anchors.centerIn: parent; text: "settings"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                                        StyledToolTip { text: Translation.tr("Settings") }
+                                    }
+                                }
 
                                 // Power Button
                                 RippleButton {
@@ -3083,7 +3294,7 @@ Scope {
                     implicitWidth: 320
                     implicitHeight: 640
                     radius: Appearance.rounding.large + 4
-                    color: Appearance.colors.colLayer0
+                    color: root.acrylicBg ? ColorUtils.transparentize(Appearance.colors.colLayer0, 0.25) : Appearance.colors.colLayer0
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
                     clip: true
@@ -3222,10 +3433,262 @@ Scope {
                             }
                         }
 
+                        // Mini Weather Widget (Modern Beautiful Weather Card)
+                        Item {
+                            id: miniWeatherCard
+                            readonly property bool hasWeather: (Config.options?.dock?.startMenuShowWeather ?? true) && Weather.data !== null
+                            visible: hasWeather
+                            Layout.fillWidth: true
+                            implicitHeight: hasWeather ? 104 : 0
+                            Layout.topMargin: miniMediaCard.visible ? 8 : 12
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 12
+                                color: Appearance.colors.colLayer1
+                                border.width: 1
+                                border.color: Appearance.colors.colLayer0Border
+
+                                // Subtle accent top highlight
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 46
+                                    radius: 12
+                                    opacity: 0.12
+                                    gradient: Gradient {
+                                        orientation: Gradient.Vertical
+                                        GradientStop { position: 0.0; color: Appearance.colors.colPrimary }
+                                        GradientStop { position: 1.0; color: "transparent" }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    anchors.topMargin: 10
+                                    anchors.bottomMargin: 10
+                                    spacing: 8
+
+                                    // Top Row: Icon + Temp + Condition + Location + Refresh
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        MaterialShapeWrappedMaterialSymbol {
+                                            shape: MaterialShape.Shape.Cookie12Sided
+                                            color: Appearance.colors.colPrimaryContainer
+                                            colSymbol: Appearance.colors.colPrimary
+                                            text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
+                                            iconSize: 20
+                                            implicitSize: 36
+                                        }
+
+                                        ColumnLayout {
+                                            spacing: 0
+                                            RowLayout {
+                                                spacing: 6
+                                                StyledText {
+                                                    text: Weather.data?.temp || "--°"
+                                                    font.weight: Font.Bold
+                                                    font.pixelSize: 18
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                                StyledText {
+                                                    text: Weather.data?.description ? (Weather.data.description.charAt(0).toUpperCase() + Weather.data.description.slice(1)) : Translation.tr("Weather")
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.DemiBold
+                                                    color: Appearance.colors.colPrimary
+                                                    elide: Text.ElideRight
+                                                    Layout.maximumWidth: 90
+                                                }
+                                            }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        // City Location
+                                        RowLayout {
+                                            spacing: 2
+                                            MaterialSymbol {
+                                                text: "location_on"
+                                                iconSize: 12
+                                                color: Appearance.colors.colOnLayer1
+                                            }
+                                            StyledText {
+                                                text: Weather.data?.city || "São Paulo"
+                                                font.pixelSize: 11
+                                                color: Appearance.colors.colOnLayer1
+                                                elide: Text.ElideRight
+                                                Layout.maximumWidth: 65
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            implicitWidth: 26
+                                            implicitHeight: 26
+                                            buttonRadius: 13
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                                            onClicked: Weather.getData()
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "refresh"
+                                                iconSize: 14
+                                                color: Appearance.colors.colOnLayer1
+                                            }
+                                            StyledToolTip { text: Translation.tr("Refresh weather") }
+                                        }
+                                    }
+
+                                    // Bottom Row: 3 Stats Pills (Humidity, Feels Like, Wind)
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+
+                                        // Humidity Pill
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 24
+                                            radius: 6
+                                            color: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.45)
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                MaterialSymbol { text: "water_drop"; iconSize: 12; color: "#38BDF8" }
+                                                StyledText {
+                                                    text: Weather.data?.humidity || "--"
+                                                    font.pixelSize: 10
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                            }
+                                        }
+
+                                        // Feels Like Pill
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 24
+                                            radius: 6
+                                            color: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.45)
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                MaterialSymbol { text: "thermostat"; iconSize: 12; color: "#F97316" }
+                                                StyledText {
+                                                    text: Weather.data?.tempFeelsLike || "--"
+                                                    font.pixelSize: 10
+                                                    color: Appearance.colors.colOnLayer0
+                                                }
+                                            }
+                                        }
+
+                                        // Wind Pill
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            implicitHeight: 24
+                                            radius: 6
+                                            color: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.45)
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 4
+                                                MaterialSymbol { text: "air"; iconSize: 12; color: "#A855F7" }
+                                                StyledText {
+                                                    text: Weather.data?.wind || "--"
+                                                    font.pixelSize: 10
+                                                    color: Appearance.colors.colOnLayer0
+                                                    elide: Text.ElideRight
+                                                    Layout.maximumWidth: 55
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // System Quick Glance Card (CPU, RAM, Battery)
+                        Item {
+                            id: systemResourcesCard
+                            readonly property bool showResources: Config.options?.dock?.startMenuShowSystemResources ?? true
+                            visible: showResources
+                            Layout.fillWidth: true
+                            implicitHeight: showResources ? 40 : 0
+                            Layout.leftMargin: 14
+                            Layout.rightMargin: 14
+                            Layout.topMargin: showResources ? 4 : 0
+                            Layout.bottomMargin: showResources ? 2 : 0
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: Appearance.colors.colLayer1
+                                border.width: 1
+                                border.color: Appearance.colors.colLayer0Border
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 8
+
+                                    // CPU
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        MaterialSymbol { text: "memory"; iconSize: 15; color: Appearance.colors.colPrimary }
+                                        ColumnLayout {
+                                            spacing: -2
+                                            StyledText { text: "CPU"; font.pixelSize: 8; color: Appearance.colors.colOnLayer1 }
+                                            StyledText { text: `${Math.round(ResourceUsage.cpuUsage * 100)}%`; font.weight: Font.Bold; font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
+                                        }
+                                    }
+
+                                    Rectangle { width: 1; height: 18; color: Appearance.colors.colLayer0Border }
+
+                                    // RAM
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        MaterialSymbol { text: "storage"; iconSize: 15; color: Appearance.colors.colSecondary }
+                                        ColumnLayout {
+                                            spacing: -2
+                                            StyledText { text: "RAM"; font.pixelSize: 8; color: Appearance.colors.colOnLayer1 }
+                                            StyledText { text: `${Math.round(ResourceUsage.memoryUsedPercentage * 100)}%`; font.weight: Font.Bold; font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
+                                        }
+                                    }
+
+                                    Rectangle { width: 1; height: 18; color: Appearance.colors.colLayer0Border }
+
+                                    // Battery / Power
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        MaterialSymbol {
+                                            text: Battery.available ? (Battery.isCharging ? "battery_charging_full" : "battery_full") : "power"
+                                            iconSize: 15
+                                            color: Battery.percentage < 0.2 ? Appearance.colors.colError : "#10B981"
+                                        }
+                                        ColumnLayout {
+                                            spacing: -2
+                                            StyledText { text: Battery.available ? Translation.tr("Battery") : Translation.tr("Power"); font.pixelSize: 8; color: Appearance.colors.colOnLayer1 }
+                                            StyledText { text: Battery.available ? `${Math.round(Battery.percentage * 100)}%` : "AC"; font.weight: Font.Bold; font.pixelSize: 11; color: Appearance.colors.colOnLayer0 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Phone Status Top Card
                         Item {
                             Layout.fillWidth: true
-                            implicitHeight: visible ? 140 : 0
+                            implicitHeight: visible ? 130 : 0
                             visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
 
                             ColumnLayout {
@@ -3236,7 +3699,7 @@ Scope {
                                 RippleButton {
                                     Layout.alignment: Qt.AlignHCenter
                                     implicitWidth: 44
-                                    implicitHeight: 62
+                                    implicitHeight: 60
                                     buttonRadius: 10
                                     colBackground: "transparent"
                                     colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -3248,7 +3711,7 @@ Scope {
                                     Rectangle {
                                         anchors.centerIn: parent
                                         width: 36
-                                        height: 54
+                                        height: 52
                                         radius: 8
                                         color: root.kdeConnected ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
                                         border.width: 2
@@ -3338,18 +3801,20 @@ Scope {
                             }
                         }
 
-                        // Quick Action Buttons
-                        ColumnLayout {
+                        // Quick Action Buttons (2x2 Grid)
+                        GridLayout {
                             Layout.fillWidth: true
                             Layout.leftMargin: 14
                             Layout.rightMargin: 14
                             visible: Config.options?.dock?.startMenuShowKdeConnect ?? true
-                            spacing: 6
+                            columns: 2
+                            rowSpacing: 6
+                            columnSpacing: 6
 
                             // KDE Connect SMS
                             RippleButton {
                                 Layout.fillWidth: true
-                                implicitHeight: 36
+                                implicitHeight: 34
                                 buttonRadius: 8
                                 colBackground: Appearance.colors.colLayer1
                                 colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -3360,17 +3825,17 @@ Scope {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    spacing: 10
-                                    MaterialSymbol { text: "sms"; iconSize: 18; color: Appearance.colors.colPrimary }
-                                    StyledText { text: Translation.tr("Messages (SMS)"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                    anchors.leftMargin: 8
+                                    spacing: 6
+                                    MaterialSymbol { text: "sms"; iconSize: 16; color: Appearance.colors.colPrimary }
+                                    StyledText { text: Translation.tr("Messages (SMS)"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0; elide: Text.ElideRight; Layout.fillWidth: true }
                                 }
                             }
 
                             // Ring Phone / Find My Phone
                             RippleButton {
                                 Layout.fillWidth: true
-                                implicitHeight: 36
+                                implicitHeight: 34
                                 buttonRadius: 8
                                 colBackground: Appearance.colors.colLayer1
                                 colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -3380,10 +3845,51 @@ Scope {
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    spacing: 10
-                                    MaterialSymbol { text: "ring_volume"; iconSize: 18; color: Appearance.colors.colSecondary }
-                                    StyledText { text: Translation.tr("Ring Phone"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer0 }
+                                    anchors.leftMargin: 8
+                                    spacing: 6
+                                    MaterialSymbol { text: "ring_volume"; iconSize: 16; color: Appearance.colors.colSecondary }
+                                    StyledText { text: Translation.tr("Ring Phone"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+                            }
+
+                            // Send Clipboard
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                buttonRadius: 8
+                                colBackground: Appearance.colors.colLayer1
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    Quickshell.execDetached(["bash", "-c", "kdeconnect-cli --share-text \"$(wl-paste)\" || notify-send 'KDE Connect' 'Sent clipboard'"]);
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    spacing: 6
+                                    MaterialSymbol { text: "content_paste_go"; iconSize: 16; color: "#38BDF8" }
+                                    StyledText { text: Translation.tr("Send Clipboard"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+                            }
+
+                            // Send File / App
+                            RippleButton {
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                buttonRadius: 8
+                                colBackground: Appearance.colors.colLayer1
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: {
+                                    Quickshell.execDetached(["kdeconnect-app"]);
+                                    GlobalStates.startMenuOpen = false;
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    spacing: 6
+                                    MaterialSymbol { text: "share"; iconSize: 16; color: "#A855F7" }
+                                    StyledText { text: Translation.tr("Send File"); font.pixelSize: 11; color: Appearance.colors.colOnLayer0; elide: Text.ElideRight; Layout.fillWidth: true }
                                 }
                             }
                         }

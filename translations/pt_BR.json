@@ -1,4 +1,12 @@
 {
+    "System Resources in Companion Panel": "Recursos do Sistema no Painel Lateral",
+    "Feels like": "Sensação",
+    "Humidity": "Umidade",
+    "Wind": "Vento",
+    "Send Clipboard": "Enviar Clipboard",
+    "Send File": "Enviar Arquivo",
+    "Ring Phone": "Tocar Telefone",
+    "System Resources": "Recursos do Sistema",
     "Attach a file. Only works with Gemini.": "Anexar um arquivo. Funciona apenas com Gemini.",
     "%1   •   %2 tasks": "%1   •   %2 tarefas",
     "Large language models": "Grandes modelos de linguagem (LLMs)",
@@ -1085,5 +1093,17 @@
     "No phone notifications": "Nenhuma notificação",
     "Connect phone via KDE Connect": "Conecte o celular via KDE Connect",
     "Clear notifications": "Limpar notificações",
-    "Dismiss": "Dispensar"
+    "Dismiss": "Dispensar",
+    "Weather Widget in Companion Panel": "Widget de Clima no Painel Lateral",
+    "Quick Folder Shortcuts in Footer": "Atalhos de Pastas no Rodapé",
+    "Translucent Acrylic / Mica Background": "Fundo Translúcido com Desfoque (Acrílico)",
+    "Home": "Início",
+    "Downloads": "Downloads",
+    "Documents": "Documentos",
+    "Pictures": "Imagens",
+    "Terminal": "Terminal",
+    "Feels like": "Sensação",
+    "Humidity": "Umidade",
+    "Weather": "Clima",
+    "Page %1 of %2": "Página %1 de %2"
 }
