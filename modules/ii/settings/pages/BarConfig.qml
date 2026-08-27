@@ -269,7 +269,7 @@ ContentPage {
                         checked: Config.options.bar.showBackground
                         onCheckedChanged: { Config.options.bar.showBackground = checked; }
                     }
-                    ConfigSelectionArray {
+                     ConfigSelectionArray {
                         text: Translation.tr("Autohide")
                         icon: "preview_off"
                         currentValue: Config.options.bar.autoHide.enable

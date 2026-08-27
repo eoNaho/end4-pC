@@ -266,6 +266,65 @@ Scope {
         property string kdeDeviceId: ""
         property var phoneNotifications: []
 
+        function sanitizePhoneText(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/<[^>]*>/g, " ")
+                .replace(/&amp;/g, "&")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&quot;/g, "\"")
+                .replace(/&#39;/g, "'")
+                .replace(/&apos;/g, "'")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+
+        function getPhoneNotifAppName(data) {
+            if (!data) return "";
+            let app = data.appName || data.app || "";
+            if (app.toLowerCase().includes("kde") || app.toLowerCase().includes("connect")) {
+                app = data.summary || "";
+            }
+            if (app.includes(".")) {
+                const lower = app.toLowerCase();
+                if (lower.includes("gm") || lower.includes("gmail")) return "Gmail";
+                if (lower.includes("photos") || lower.includes("fotos")) return "Fotos";
+                if (lower.includes("whatsapp")) return "WhatsApp";
+                if (lower.includes("instagram")) return "Instagram";
+                if (lower.includes("telegram")) return "Telegram";
+                if (lower.includes("spotify")) return "Spotify";
+                if (lower.includes("twitter") || lower.includes("x.android")) return "X";
+                if (lower.includes("discord")) return "Discord";
+                const parts = app.split(".");
+                app = parts[parts.length - 1];
+                app = app.charAt(0).toUpperCase() + app.slice(1);
+            }
+            return sanitizePhoneText(app);
+        }
+
+        function getPhoneNotifTitle(data) {
+            if (!data) return Translation.tr("Notification");
+            let title = "";
+            if (data.title && data.title.length > 0) {
+                title = data.title;
+            } else if (data.summary && data.summary.length > 0) {
+                title = data.summary;
+            } else {
+                title = getPhoneNotifAppName(data) || Translation.tr("Notification");
+            }
+            return sanitizePhoneText(title);
+        }
+
+        function getPhoneNotifBody(data) {
+            if (!data) return "";
+            let body = data.body || data.text || "";
+            if (!body && data.summary && data.title && data.summary !== data.title) {
+                body = data.summary;
+            }
+            return sanitizePhoneText(body);
+        }
+
         Process {
             id: kdeCheckProc
             command: ["bash", "-c", "DEV=$(kdeconnect-cli -a --name-only 2>/dev/null | grep -v 'dispositivo' | head -n 1); ID=$(kdeconnect-cli -a --id-only 2>/dev/null | grep -v 'dispositivo' | head -n 1); if [ -n \"$DEV\" ]; then echo \"CONNECTED|$DEV|$ID\"; else echo \"DISCONNECTED\"; fi"]
@@ -295,29 +354,67 @@ Scope {
 
         Process {
             id: kdeNotifProc
-            command: ["bash", "-c", "kdeconnect-cli -d \"" + root.kdeDeviceId + "\" --list-notifications 2>/dev/null | grep -v 'Nenhum' | head -n 5"]
+            command: ["bash", "-c", "kdeconnect-cli -d \"" + root.kdeDeviceId + "\" --list-notifications 2>/dev/null"]
             stdout: StdioCollector {
                 onStreamFinished: {
-                    const lines = text ? text.trim().split("\n").filter(l => l.trim().length > 0) : [];
+                    if (!text || text.trim().length === 0) {
+                        root.phoneNotifications = [];
+                        return;
+                    }
+                    const rawLines = text.split("\n");
                     let list = [];
-                    for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i];
-                        const parts = line.split(":");
-                        if (parts.length >= 2) {
-                            list.push({
-                                app: parts[0].trim(),
-                                title: parts[1] ? parts[1].trim() : "",
-                                body: parts.slice(2).join(":").trim()
-                            });
+                    let current = null;
+
+                    for (let i = 0; i < rawLines.length; i++) {
+                        const line = rawLines[i];
+                        const trimmed = line.trim();
+                        if (!trimmed || trimmed.toLowerCase().includes("nenhum") || trimmed.toLowerCase().includes("no notifications")) {
+                            continue;
+                        }
+
+                        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+                            if (current) {
+                                list.push(current);
+                            }
+                            let content = trimmed.substring(2).trim();
+                            content = content.replace(/^\d+:\s*/, "");
+                            const parts = content.split(":");
+                            if (parts.length >= 3) {
+                                current = {
+                                    appName: parts[0].trim(),
+                                    title: parts[1].trim(),
+                                    body: parts.slice(2).join(":").trim()
+                                };
+                            } else if (parts.length === 2) {
+                                current = {
+                                    appName: parts[0].trim(),
+                                    title: parts[0].trim(),
+                                    body: parts[1].trim()
+                                };
+                            } else {
+                                current = {
+                                    appName: "Phone",
+                                    title: content,
+                                    body: ""
+                                };
+                            }
+                        } else if (current) {
+                            current.body = (current.body ? current.body + " " : "") + trimmed;
                         } else {
-                            list.push({
-                                app: "Phone",
-                                title: line.trim(),
-                                body: ""
-                            });
+                            const parts = trimmed.split(":");
+                            if (parts.length >= 2) {
+                                list.push({
+                                    appName: parts[0].trim(),
+                                    title: parts[1].trim(),
+                                    body: parts.slice(2).join(":").trim()
+                                });
+                            }
                         }
                     }
-                    root.phoneNotifications = list;
+                    if (current) {
+                        list.push(current);
+                    }
+                    root.phoneNotifications = list.slice(0, 5);
                 }
             }
         }
@@ -3961,10 +4058,15 @@ Scope {
                                         required property var modelData
                                         required property int index
                                         Layout.fillWidth: true
-                                        implicitHeight: 46
+                                        implicitHeight: 48
+                                        clip: true
                                         buttonRadius: 8
                                         colBackground: "transparent"
                                         colBackgroundHover: Appearance.colors.colLayer1Hover
+                                        onClicked: {
+                                            Quickshell.execDetached(["kdeconnect-app"]);
+                                            GlobalStates.startMenuOpen = false;
+                                        }
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -3973,14 +4075,25 @@ Scope {
                                             spacing: 8
 
                                             Rectangle {
-                                                width: 28
-                                                height: 28
+                                                Layout.preferredWidth: 28
+                                                Layout.preferredHeight: 28
+                                                Layout.alignment: Qt.AlignVCenter
                                                 radius: 6
                                                 color: Appearance.colors.colPrimaryContainer
 
                                                 MaterialSymbol {
                                                     anchors.centerIn: parent
-                                                    text: "smartphone"
+                                                    text: {
+                                                        const titleText = (notifTitle.text || "").toLowerCase();
+                                                        const bodyText = (notifBody.text || "").toLowerCase();
+                                                        const appText = ((modelData?.appName || modelData?.app || "") + "").toLowerCase();
+                                                        if (titleText.includes("mail") || appText.includes("mail") || appText.includes("gm") || bodyText.includes("mail")) return "mail";
+                                                        if (titleText.includes("photo") || titleText.includes("foto") || appText.includes("photo") || appText.includes("foto")) return "photo_library";
+                                                        if (titleText.includes("chat") || titleText.includes("sms") || titleText.includes("msg") || appText.includes("whatsapp") || appText.includes("telegram") || appText.includes("discord")) return "chat";
+                                                        if (titleText.includes("call") || titleText.includes("ligação") || titleText.includes("chamada")) return "call";
+                                                        if (titleText.includes("offer") || titleText.includes("promo") || titleText.includes("cupom") || titleText.includes("desconto") || titleText.includes("%") || titleText.includes("r$") || appText.includes("aliexpress") || appText.includes("amazon") || appText.includes("shopee") || appText.includes("magalu")) return "local_offer";
+                                                        return "smartphone";
+                                                    }
                                                     iconSize: 16
                                                     color: Appearance.colors.colPrimary
                                                 }
@@ -3988,29 +4101,37 @@ Scope {
 
                                             ColumnLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 1
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 2
+                                                clip: true
 
                                                 StyledText {
+                                                    id: notifTitle
                                                     Layout.fillWidth: true
-                                                    text: modelData?.title || modelData?.summary || modelData?.appName || Translation.tr("Phone Alert")
+                                                    text: root.getPhoneNotifTitle(modelData)
                                                     font.weight: Font.Medium
                                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                                     color: Appearance.colors.colOnLayer0
                                                     elide: Text.ElideRight
+                                                    maximumLineCount: 1
                                                 }
 
                                                 StyledText {
+                                                    id: notifBody
                                                     Layout.fillWidth: true
-                                                    text: modelData?.body || modelData?.app || Translation.tr("Notification")
+                                                    text: root.getPhoneNotifBody(modelData)
+                                                    visible: text.length > 0
                                                     font.pixelSize: Appearance.font.pixelSize.smallest
                                                     color: Appearance.colors.colOnLayer1
                                                     elide: Text.ElideRight
+                                                    maximumLineCount: 1
                                                 }
                                             }
 
                                             // Dismiss button (visible on hover)
                                             RippleButton {
                                                 visible: notifItemBtn.hovered
+                                                Layout.alignment: Qt.AlignVCenter
                                                 implicitWidth: 22
                                                 implicitHeight: 22
                                                 buttonRadius: 11
