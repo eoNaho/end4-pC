@@ -65,17 +65,75 @@ ContentPage {
         { id: "vpnIndicator",       name: Translation.tr("VPN Status"),          icon: "vpn_lock" },
     ]
 
+    property string selectedLayoutMonitor: "all"
+
+    function getMonitorLayoutsArray() {
+        const raw = Config.options.bar.monitorLayouts
+        if (!raw) return []
+        let res = []
+        const len = raw.length ?? 0
+        for (let i = 0; i < len; i++) {
+            let item = raw[i]
+            if (item && typeof item === "object" && item.name) {
+                res.push({
+                    name: item.name,
+                    leftLayout: Array.from(item.leftLayout || []),
+                    middleLayout: Array.from(item.middleLayout || []),
+                    rightLayout: Array.from(item.rightLayout || [])
+                })
+            }
+        }
+        return res
+    }
+
+    readonly property var currentMonitorLayoutEntry: getMonitorLayoutsArray().find(m => m && m.name === selectedLayoutMonitor)
+    readonly property bool hasCustomLayout: selectedLayoutMonitor !== "all" && !!currentMonitorLayoutEntry
+
+    readonly property var activeLeftLayout: hasCustomLayout
+        ? (currentMonitorLayoutEntry?.leftLayout ?? Config.options.bar.layouts.leftLayout)
+        : Config.options.bar.layouts.leftLayout
+
+    readonly property var activeMiddleLayout: hasCustomLayout
+        ? (currentMonitorLayoutEntry?.middleLayout ?? Config.options.bar.layouts.middleLayout)
+        : Config.options.bar.layouts.middleLayout
+
+    readonly property var activeRightLayout: hasCustomLayout
+        ? (currentMonitorLayoutEntry?.rightLayout ?? Config.options.bar.layouts.rightLayout)
+        : Config.options.bar.layouts.rightLayout
+
     function availableFor() {
         let used = [
-            ...Config.options.bar.layouts.leftLayout,
-            ...Config.options.bar.layouts.middleLayout,
-            ...Config.options.bar.layouts.rightLayout
+            ...(activeLeftLayout || []),
+            ...(activeMiddleLayout || []),
+            ...(activeRightLayout || [])
         ]
         const multipleAllowed = ["visualizer", "divisor"]
         return allWidgets.filter(w => {
             if (w.id === "divisor" && Config.options.bar.borderless !== "transparent") return false
             return !used.includes(w.id) || multipleAllowed.includes(w.id)
         })
+    }
+
+    function updateBarLayout(position, list) {
+        if (selectedLayoutMonitor !== "all") {
+            let monLayouts = getMonitorLayoutsArray().map(m => Object.assign({}, m))
+            let idx = monLayouts.findIndex(m => m && m.name === selectedLayoutMonitor)
+            if (idx === -1) {
+                let newMon = {
+                    name: selectedLayoutMonitor,
+                    leftLayout: Array.from(Config.options.bar.layouts.leftLayout || []),
+                    middleLayout: Array.from(Config.options.bar.layouts.middleLayout || []),
+                    rightLayout: Array.from(Config.options.bar.layouts.rightLayout || [])
+                }
+                newMon[position] = Array.from(list || [])
+                monLayouts.push(newMon)
+            } else {
+                monLayouts[idx][position] = Array.from(list || [])
+            }
+            Config.options.bar.monitorLayouts = monLayouts
+        } else {
+            Config.options.bar.layouts[position] = Array.from(list || [])
+        }
     }
 
     function getWidgetName(id) {
@@ -181,28 +239,71 @@ ContentPage {
             title: Translation.tr("Bar layout")
 
             GroupedList {
+                ConfigSelectionArray {
+                    visible: Hyprland.monitors.values.length > 1
+                    text: Translation.tr("Configure for")
+                    icon: "monitor"
+                    currentValue: page.selectedLayoutMonitor
+                    onSelected: newValue => { page.selectedLayoutMonitor = newValue; }
+                    options: {
+                        let opts = [{ displayName: Translation.tr("Default (All)"), icon: "tv_displays", value: "all" }];
+                        for (let i = 0; i < Hyprland.monitors.values.length; i++) {
+                            let mon = Hyprland.monitors.values[i];
+                            opts.push({ displayName: mon.name, icon: "monitor", value: mon.name });
+                        }
+                        return opts;
+                    }
+                }
+
+                ConfigSwitch {
+                    visible: page.selectedLayoutMonitor !== "all"
+                    buttonIcon: "tune"
+                    text: Translation.tr("Use custom layout for this monitor")
+                    checked: page.hasCustomLayout
+                    onCheckedChanged: {
+                        let monLayouts = page.getMonitorLayoutsArray().map(m => Object.assign({}, m))
+                        let idx = monLayouts.findIndex(m => m && m.name === page.selectedLayoutMonitor)
+                        if (checked) {
+                            if (idx === -1) {
+                                monLayouts.push({
+                                    name: page.selectedLayoutMonitor,
+                                    leftLayout: Array.from(Config.options.bar.layouts.leftLayout || []),
+                                    middleLayout: Array.from(Config.options.bar.layouts.middleLayout || []),
+                                    rightLayout: Array.from(Config.options.bar.layouts.rightLayout || [])
+                                })
+                                Config.options.bar.monitorLayouts = monLayouts
+                            }
+                        } else {
+                            if (idx !== -1) {
+                                monLayouts.splice(idx, 1)
+                                Config.options.bar.monitorLayouts = monLayouts
+                            }
+                        }
+                    }
+                }
+
                 LayoutSection {
                     sectionTitle: Config.options.bar.vertical ? Translation.tr("Top") : Translation.tr("Left")
-                    layout: Config.options.bar.layouts.leftLayout
+                    layout: page.activeLeftLayout
                     availableWidgets: page.availableFor()
                     getWidgetName: page.getWidgetName
-                    onUpdate: list => Config.options.bar.layouts.leftLayout = list
+                    onUpdate: list => page.updateBarLayout("leftLayout", list)
                 }
 
                 LayoutSection {
                     sectionTitle: Translation.tr("Center")
-                    layout: Config.options.bar.layouts.middleLayout
+                    layout: page.activeMiddleLayout
                     availableWidgets: page.availableFor()
                     getWidgetName: page.getWidgetName
-                    onUpdate: list => Config.options.bar.layouts.middleLayout = list
+                    onUpdate: list => page.updateBarLayout("middleLayout", list)
                 }
 
                 LayoutSection {
                     sectionTitle: Config.options.bar.vertical ? Translation.tr("Bottom") : Translation.tr("Right")
-                    layout: Config.options.bar.layouts.rightLayout
+                    layout: page.activeRightLayout
                     availableWidgets: page.availableFor()
                     getWidgetName: page.getWidgetName
-                    onUpdate: list => Config.options.bar.layouts.rightLayout = list
+                    onUpdate: list => page.updateBarLayout("rightLayout", list)
                 }
             }
         }

@@ -34,7 +34,10 @@ Item {
             Quickshell.iconPath("user-desktop", "image-missing"))
     }
 
-    implicitWidth:  vertical ? Appearance.sizes.verticalBarWidth : Math.min(colLayout.implicitWidth + 12, 280)
+    readonly property real screenWidth: root.QsWindow.window?.screen?.width ?? 1920
+    readonly property real maxAllowedWidth: screenWidth < 1200 ? 120 : screenWidth < 1500 ? 170 : 280
+
+    implicitWidth:  vertical ? Appearance.sizes.verticalBarWidth : Math.min(colLayout.implicitWidth + 12, root.maxAllowedWidth)
     implicitHeight: vertical ? iconItem.implicitHeight : Appearance.sizes.barHeight
 
     MouseArea {

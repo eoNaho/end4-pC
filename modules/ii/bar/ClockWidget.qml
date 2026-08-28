@@ -8,6 +8,9 @@ BarWidgetSwitcher {
     id: root
     property bool borderless: Config.options.bar.borderless
     property bool showDate: Config.options.time.showDate
+    property var screen: root.QsWindow.window?.screen
+    readonly property bool isCompact: (screen?.width ?? 1920) < 1500
+    readonly property string effectiveDate: isCompact ? DateTime.shortDate : DateTime.longDate
     property var today: new Date()
     readonly property string dateTimeString: DateTime.time
     readonly property bool hasAmPm: dateTimeString.toLowerCase().includes("am") || dateTimeString.toLowerCase().includes("pm")
@@ -112,7 +115,7 @@ BarWidgetSwitcher {
                 visible: root.showDate
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnLayer1
-                text: DateTime.longDate
+                text: root.effectiveDate
             }
             StyledText {
                 visible: root.showDate
@@ -143,7 +146,7 @@ BarWidgetSwitcher {
                 visible: root.showDate
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnPrimaryContainer
-                text: DateTime.longDate
+                text: root.effectiveDate
                 Layout.alignment: Qt.AlignVCenter
                 leftPadding: 5
             }

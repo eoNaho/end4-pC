@@ -25,9 +25,47 @@ Item {
         return layout.filter(name => name !== "sysTray")
     }
 
-    readonly property var effectiveLeftLayout:   filterLayout(Config.options.bar.layouts.leftLayout)
-    readonly property var effectiveMiddleLayout: filterLayout(Config.options.bar.layouts.middleLayout)
-    readonly property var effectiveRightLayout:  filterLayout(Config.options.bar.layouts.rightLayout)
+    property var screen: root.QsWindow.window?.screen
+    readonly property string screenName: screen?.name ?? ""
+    readonly property real screenWidth: screen?.width ?? parent.width
+    readonly property bool isCompact: screenWidth < 1500
+    readonly property bool isTight: screenWidth < 1200
+    property real useShortenedForm: isTight ? 2 : isCompact ? 1 : 0
+
+    function getRawLayout(position) {
+        const raw = Config.options?.bar?.monitorLayouts;
+        if (raw && screenName !== "") {
+            const len = raw.length ?? 0;
+            for (let i = 0; i < len; i++) {
+                const mon = raw[i];
+                if (mon && mon.name === screenName) {
+                    if (mon[position] && mon[position].length !== undefined) {
+                        return Array.from(mon[position]);
+                    }
+                }
+            }
+            if (typeof raw === "object" && raw[screenName]) {
+                const mon = raw[screenName];
+                if (mon && mon[position] && mon[position].length !== undefined) {
+                    return Array.from(mon[position]);
+                }
+            }
+        }
+        return Array.from(Config.options.bar.layouts[position] || []);
+    }
+
+    readonly property var effectiveLeftLayout:   filterLayout(getRawLayout("leftLayout"))
+    readonly property var effectiveMiddleLayout: filterLayout(getRawLayout("middleLayout"))
+    readonly property var effectiveRightLayout:  filterLayout(getRawLayout("rightLayout"))
+
+    readonly property real leftSideMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 10)
+    readonly property real rightSideMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 10)
+
+    readonly property real centerWidth: root.isMaterial ? centerMaterialPill.implicitWidth : middleRow.implicitWidth
+    readonly property real rawLeftWidth: root.isMaterial ? leftMaterialPill.implicitWidth : leftRow.implicitWidth
+    readonly property real rawRightWidth: root.isMaterial ? rightMaterialPill.implicitWidth : rightRow.implicitWidth
+
+    readonly property real maxSideWidth: centerOnly ? (parent.width - leftSideMargin - rightSideMargin) : Math.max(40, (parent.width - centerWidth) / 2 - Math.max(leftSideMargin, rightSideMargin) - 8)
 
     function getWidgetUrl(name) {
         if (!name) return "";
@@ -63,10 +101,6 @@ Item {
                 return Appearance.colors.colPrimaryContainer;
         }
     }
-
-    property var screen: root.QsWindow.window?.screen
-    property real useShortenedForm: (Appearance.sizes.barHellaShortenScreenWidthThreshold >= screen?.width) ? 2 : (Appearance.sizes.barShortenScreenWidthThreshold >= screen?.width) ? 1 : 0
-
 
     Rectangle {
         id: barBackground
@@ -114,11 +148,13 @@ Item {
 
         // Left
         Item {
+            id: leftContainer
             anchors.left: parent.left
-            anchors.leftMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 10)
+            anchors.leftMargin: root.leftSideMargin
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: root.isMaterial ? leftMaterialPill.implicitWidth : leftRow.implicitWidth
+            width: Math.min(root.rawLeftWidth, root.maxSideWidth)
+            clip: true
 
             // Material pill wrapper
             Rectangle {
@@ -302,11 +338,13 @@ Item {
 
         // Right
         Item {
+            id: rightContainer
             anchors.right: parent.right
-            anchors.rightMargin: root.isMaterial ? (Config.options.hyprland.general.gapsOut || 5) : (Config.options.bar.cornerStyle === 1 ? 4 : 10)
+            anchors.rightMargin: root.rightSideMargin
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            width: root.isMaterial ? rightMaterialPill.implicitWidth : rightRow.implicitWidth
+            width: Math.min(root.rawRightWidth, root.maxSideWidth)
+            clip: true
 
             // Material pill wrapper
             Rectangle {

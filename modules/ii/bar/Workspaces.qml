@@ -21,7 +21,9 @@ ButtonMouseArea {
     property bool vertical: Config.options.bar.vertical
     property bool superPressAndHeld: false // Relevant modifications at bottom of file
 
-    property real workspaceButtonWidth: Config.options.bar.cornerStyle === 3 ? 30 : 26
+    property var screen: root.QsWindow.window?.screen
+    readonly property bool isCompact: (screen?.width ?? 1920) < 1500
+    property real workspaceButtonWidth: isCompact ? (Config.options.bar.cornerStyle === 3 ? 24 : 22) : (Config.options.bar.cornerStyle === 3 ? 30 : 26)
     property real activeWorkspaceMargin: 2
     property real activeWorkspaceSize: workspaceButtonWidth - activeWorkspaceMargin * 2
     property real workspaceIconSize: workspaceButtonWidth * 0.69

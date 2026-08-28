@@ -7,7 +7,9 @@ import QtQuick.Layouts
 BarWidgetSwitcherArea {
     id: root
     property bool alwaysShowAllResources: false
-    horizontalExtraPadding: 12
+    property var screen: root.QsWindow.window?.screen
+    readonly property bool isCompact: (screen?.width ?? 1920) < 1500
+    horizontalExtraPadding: isCompact ? 6 : 12
 
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
@@ -24,26 +26,26 @@ BarWidgetSwitcherArea {
                 iconName: "planner_review"
                 shown: Config.options.bar.resources.alwaysShowCpu
                 percentage: ResourceUsage.cpuUsage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
                 warningThreshold: Config.options.bar.resources.cpuWarningThreshold
             }
             Resource {
                 iconName: "thermostat"
                 shown: Config.options.bar.resources.alwaysShowCpuTemp
                 percentage: ResourceUsage.cpuTemp / 100
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
             }
             Resource {
                 iconName: "hard_drive"
                 shown: Config.options.bar.resources.alwaysShowDisk
                 percentage: ResourceUsage.diskUsedPercentage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
             }
             Resource {
                 iconName: "swap_horiz"
                 shown: Config.options.bar.resources.alwaysShowSwap
                 percentage: ResourceUsage.swapUsedPercentage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
                 warningThreshold: Config.options.bar.resources.swapWarningThreshold
             }
         }
@@ -62,26 +64,26 @@ BarWidgetSwitcherArea {
                 iconName: "planner_review"
                 shown: Config.options.bar.resources.alwaysShowCpu
                 percentage: ResourceUsage.cpuUsage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
                 warningThreshold: Config.options.bar.resources.cpuWarningThreshold
             }
             Resource {
                 iconName: "thermostat"
                 shown: Config.options.bar.resources.alwaysShowCpuTemp
                 percentage: ResourceUsage.cpuTemp / 100
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
             }
             Resource {
                 iconName: "hard_drive"
                 shown: Config.options.bar.resources.alwaysShowDisk
                 percentage: ResourceUsage.diskUsedPercentage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
             }
             Resource {
                 iconName: "swap_horiz"
                 shown: Config.options.bar.resources.alwaysShowSwap
                 percentage: ResourceUsage.swapUsedPercentage
-                Layout.leftMargin: shown ? 6 : 0
+                Layout.leftMargin: shown ? (root.isCompact ? 3 : 6) : 0
                 warningThreshold: Config.options.bar.resources.swapWarningThreshold
             }
         }
