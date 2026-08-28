@@ -9,8 +9,9 @@ Singleton {
     id: root
 
     property bool smartTray: Config.options.tray.filterPassive
-    property list<var> itemsInUserList: SystemTray.items.values.filter(i => (Config.options.tray.pinnedItems.includes(i.id) && (!smartTray || i.status !== Status.Passive)))
-    property list<var> itemsNotInUserList: SystemTray.items.values.filter(i => (!Config.options.tray.pinnedItems.includes(i.id) && (!smartTray || i.status !== Status.Passive)))
+    property var pinnedConfigList: Array.from(Config.options.tray.pinnedItems || [])
+    property list<var> itemsInUserList: SystemTray.items.values.filter(i => (root.pinnedConfigList.includes(i.id) && (!smartTray || i.status !== Status.Passive)))
+    property list<var> itemsNotInUserList: SystemTray.items.values.filter(i => (!root.pinnedConfigList.includes(i.id) && (!smartTray || i.status !== Status.Passive)))
 
     property bool invertPins: Config.options.tray.invertPinnedItems
     property list<var> pinnedItems: invertPins ? itemsNotInUserList : itemsInUserList
@@ -24,15 +25,36 @@ Singleton {
         return result;
     }
 
-    // Pinning
+    function getPins() {
+        return Array.from(Config.options?.tray?.pinnedItems || []);
+    }
+
+    // Pinning: makes the item appear on the main bar
     function pin(itemId) {
-        var pins = Config.options.tray.pinnedItems;
-        if (pins.includes(itemId)) return;
-        Config.options.tray.pinnedItems.push(itemId);
+        let pins = root.getPins();
+        if (root.invertPins) {
+            Config.options.tray.pinnedItems = pins.filter(id => id !== itemId);
+        } else {
+            if (!pins.includes(itemId)) {
+                pins.push(itemId);
+                Config.options.tray.pinnedItems = pins;
+            }
+        }
     }
+
+    // Unpinning: makes the item move to the hidden/overflow dropdown
     function unpin(itemId) {
-        Config.options.tray.pinnedItems = Config.options.tray.pinnedItems.filter(id => id !== itemId);
+        let pins = root.getPins();
+        if (root.invertPins) {
+            if (!pins.includes(itemId)) {
+                pins.push(itemId);
+                Config.options.tray.pinnedItems = pins;
+            }
+        } else {
+            Config.options.tray.pinnedItems = pins.filter(id => id !== itemId);
+        }
     }
+
     function isPinned(itemId) {
         for (var i = 0; i < root.pinnedItems.length; i++) {
             if (root.pinnedItems[i].id === itemId)
@@ -42,11 +64,10 @@ Singleton {
     }
 
     function togglePin(itemId) {
-        var pins = Config.options.tray.pinnedItems;
-        if (pins.includes(itemId)) {
-            unpin(itemId)
+        if (root.isPinned(itemId)) {
+            root.unpin(itemId);
         } else {
-            pin(itemId)
+            root.pin(itemId);
         }
     }
 
