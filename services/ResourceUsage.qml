@@ -89,10 +89,8 @@ Singleton {
         running: true
         repeat: true
         onTriggered: {
-            tempProc.running = false
-            tempProc.running = true
-            diskProc.running = false
-            diskProc.running = true
+            if (!tempProc.running) tempProc.running = true
+            if (!diskProc.running) diskProc.running = true
         }
     }
 
