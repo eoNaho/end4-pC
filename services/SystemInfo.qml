@@ -29,6 +29,7 @@ Singleton {
     property string packages: ""
     property string installAge: ""
     property string kernelVersion: ""
+    property bool hasNvidia: false
 
     function refresh() {
         getCpu.running = false;       getCpu.running = true
@@ -152,22 +153,32 @@ Singleton {
         id: getGpu
         running: false
         command: ["bash", "-c", `
-            gpu=$(glxinfo 2>/dev/null | grep 'renderer string' | grep -o 'Intel(R) HD Graphics [0-9]\\{4\\}' | sed 's/Intel(R)/Intel®/')
-            if [ -z "$gpu" ]; then
-                gpu=$(lspci | grep -iE 'vga|3d|display' | head -1 | sed -E '
-                    s/.*: //;
-                    s/\\(rev [0-9a-f]+\\)//;
-                    s/Advanced Micro Devices, Inc\\. \\[AMD\\/ATI\\]//;
-                    s/NVIDIA Corporation//;
-                    s/Intel Corporation//;
-                    s/.*\\[([^]]+)\\]$/\\1/;
-                    s/^ *//;
-                    s/ *$//
-                ')
+            nvidia=0;
+            if lspci 2>/dev/null | grep -iq nvidia || [ -e /dev/nvidia0 ]; then
+                nvidia=1
             fi
-            echo "$gpu"
+            gpu=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -1 | sed -E '
+                s/.*: //;
+                s/\\(rev [0-9a-f]+\\)//;
+                s/Advanced Micro Devices, Inc\\. \\[AMD\\/ATI\\]//;
+                s/NVIDIA Corporation//;
+                s/Intel Corporation//;
+                s/.*\\[([^]]+)\\]$/\\1/;
+                s/^ *//;
+                s/ *$//
+            ')
+            if [ -z "$gpu" ]; then
+                gpu=$(glxinfo 2>/dev/null | grep 'renderer string' | grep -o 'Intel(R) HD Graphics [0-9]\\{4\\}' | sed 's/Intel(R)/Intel®/')
+            fi
+            echo "$gpu|$nvidia"
         `]
-        stdout: SplitParser { onRead: data => root.gpu = data.trim() }
+        stdout: SplitParser {
+            onRead: data => {
+                const parts = data.trim().split("|");
+                root.gpu = parts[0] || "";
+                root.hasNvidia = (parts[1] === "1");
+            }
+        }
     }
 
     Process {

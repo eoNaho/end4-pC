@@ -164,7 +164,7 @@ ContentPage {
 
                 ConfigComboBox {
                     text: Translation.tr("Encoder / Hardware Acceleration")
-                    description: Translation.tr("Video encoding backend and hardware acceleration")
+                    description: SystemInfo.hasNvidia ? Translation.tr("NVIDIA GPU detected — NVENC hardware encoding recommended") : Translation.tr("Video encoding backend and hardware acceleration")
                     buttonIcon: "memory"
                     fieldWidth: 240
                     currentValue: Config.options.screenRecord.encoder || "auto"

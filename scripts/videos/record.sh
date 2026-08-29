@@ -474,16 +474,20 @@ SELECTED_CODEC="libx264"
 HAS_NVENC=0
 if ffmpeg -encoders 2>/dev/null | grep -q "h264_nvenc"; then
     HAS_NVENC=1
+elif [[ -e /dev/nvidia0 ]] || lspci 2>/dev/null | grep -iq nvidia; then
+    if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -encoders 2>/dev/null | grep -q "nvenc"; then
+        HAS_NVENC=1
+    fi
 fi
 
 if [[ "$ENCODER_CHOICE" == "nvenc" ]] || [[ "$ENCODER_CHOICE" == "auto" && $HAS_NVENC -eq 1 ]]; then
     SELECTED_CODEC="h264_nvenc"
     CMD_ARGS+=(-c "$SELECTED_CODEC")
     case "$QUALITY_CHOICE" in
-        low)      CMD_ARGS+=(-p cq=28 -p preset=p2) ;;
-        medium)   CMD_ARGS+=(-p cq=23 -p preset=p4) ;;
-        lossless) CMD_ARGS+=(-p cq=0 -p preset=p7) ;;
-        high|*)   CMD_ARGS+=(-p cq=18 -p preset=p5) ;;
+        low)      CMD_ARGS+=(-p cq=28 -p preset=p2 -p tune=hq) ;;
+        medium)   CMD_ARGS+=(-p cq=23 -p preset=p4 -p tune=hq) ;;
+        lossless) CMD_ARGS+=(-p cq=0 -p preset=p7 -p tune=lossless) ;;
+        high|*)   CMD_ARGS+=(-p cq=19 -p preset=p5 -p tune=hq) ;;
     esac
 elif [[ "$ENCODER_CHOICE" == "vaapi" && -e /dev/dri/renderD128 ]]; then
     SELECTED_CODEC="h264_vaapi"
