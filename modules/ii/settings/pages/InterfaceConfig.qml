@@ -634,6 +634,12 @@ ContentPage {
                         onCheckedChanged: { Config.options.dock.showMedia = checked }
                     }
                     ConfigSwitch {
+                        buttonIcon: "neurology"
+                        text: Translation.tr("AI Usage")
+                        checked: Config.options.dock.showAiUsage
+                        onCheckedChanged: { Config.options.dock.showAiUsage = checked }
+                    }
+                    ConfigSwitch {
                         buttonIcon: "keep"
                         text: Translation.tr("Show Pin Button")
                         checked: Config.options.dock.showPinButton
@@ -702,6 +708,12 @@ ContentPage {
                         text: Translation.tr("Quick Folder Shortcuts in Footer")
                         checked: Config.options.dock.startMenuShowQuickFolders ?? true
                         onCheckedChanged: { Config.options.dock.startMenuShowQuickFolders = checked }
+                    }
+                    ConfigSwitch {
+                        buttonIcon: "neurology"
+                        text: Translation.tr("AI Usage in Footer")
+                        checked: Config.options.dock.startMenuShowAiUsage ?? true
+                        onCheckedChanged: { Config.options.dock.startMenuShowAiUsage = checked }
                     }
                     ConfigSwitch {
                         buttonIcon: "description"

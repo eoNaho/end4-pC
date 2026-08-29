@@ -17,7 +17,7 @@ MouseArea {
     implicitHeight: (visible && providers.length > 0) ? (vertical ? (contentLoader.item?.implicitHeight ?? 0) : Appearance.sizes.barHeight) : 0
 
     acceptedButtons: Qt.LeftButton | Qt.RightButton
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: true
 
     onPressed: mouse => {
         if (mouse.button === Qt.RightButton) {
@@ -49,7 +49,7 @@ MouseArea {
                     ringSize: root.ringSize
                     lineWidth: 2
                     vertical: false
-                    showPercentLabel: Config.options.ai.usage.showPercentLabel ?? false
+                    showPercentLabel: Config.options.ai.usage.showPercentLabel ?? true
                     isHovered: root.containsMouse
                 }
             }

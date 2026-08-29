@@ -41,7 +41,7 @@ Scope {
 
             color: "transparent"
             anchors { top: true; bottom: true; left: !root.isRight; right: root.isRight }
-            implicitWidth: pillBackground.implicitWidth + Appearance.sizes.elevationMargin
+            implicitWidth: pillBackground.implicitWidth
             exclusiveZone: 0
             WlrLayershell.namespace: "quickshell:aiUsageDock"
             WlrLayershell.layer: WlrLayer.Top
@@ -51,27 +51,14 @@ Scope {
             MouseArea {
                 id: edgeMouseArea
                 hoverEnabled: true
-                width: dockRoot.implicitWidth
-                height: pillBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
-                anchors {
-                    verticalCenter: parent.verticalCenter
-                    verticalCenterOffset: (Config.options.ai.usage.dock.position - 0.5) * (dockRoot.height - pillBackground.implicitHeight)
-                    right: root.isRight ? parent.right : undefined
-                    left: root.isRight ? undefined : parent.left
-                    rightMargin: root.isRight
-                        ? (dockRoot.reveal ? 0 : -Math.max(0, pillBackground.implicitWidth - root.hoverRegionWidth))
-                        : 0
-                    leftMargin: root.isRight
-                        ? 0
-                        : (dockRoot.reveal ? 0 : -Math.max(0, pillBackground.implicitWidth - root.hoverRegionWidth))
-                }
+                width: parent.width
+                height: pillBackground.implicitHeight
+                y: Math.max(0, Math.min(dockRoot.height - height, (dockRoot.height - height) * Config.options.ai.usage.dock.position))
+                x: root.isRight
+                    ? (dockRoot.reveal ? 0 : Math.max(0, width - root.hoverRegionWidth))
+                    : (dockRoot.reveal ? 0 : -Math.max(0, width - root.hoverRegionWidth))
 
-                Behavior on anchors.rightMargin {
-                    enabled: root.isRight
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on anchors.leftMargin {
-                    enabled: !root.isRight
+                Behavior on x {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
@@ -79,19 +66,26 @@ Scope {
                     target: pillBackground
                 }
 
-                Item {
-                    id: pillContainer
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: root.isRight ? parent.right : undefined
-                    anchors.left: root.isRight ? undefined : parent.left
-                    width: pillBackground.width
-                    height: pillBackground.height
+                Rectangle {
+                    id: pillBackground
+                    anchors.fill: parent
+                    implicitWidth: ringColumn.implicitWidth + 36
+                    implicitHeight: ringColumn.implicitHeight + 40
+
+                    color: Appearance.colors.colLayer0
+                    border.width: 1
+                    border.color: Qt.alpha(Appearance.colors.colOnLayer0, 0.08)
+
+                    topLeftRadius: root.isRight ? 26 : 0
+                    bottomLeftRadius: root.isRight ? 26 : 0
+                    topRightRadius: root.isRight ? 0 : 26
+                    bottomRightRadius: root.isRight ? 0 : 26
 
                     // Top organic fillet corner connecting to screen edge
                     RoundCorner {
                         implicitSize: 22
                         color: Appearance.colors.colLayer0
-                        corner: root.isRight ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
+                        corner: root.isRight ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
                         anchors.top: pillBackground.top
                         anchors.topMargin: -implicitSize
                         anchors.right: root.isRight ? parent.right : undefined
@@ -102,60 +96,54 @@ Scope {
                     RoundCorner {
                         implicitSize: 22
                         color: Appearance.colors.colLayer0
-                        corner: root.isRight ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
+                        corner: root.isRight ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
                         anchors.bottom: pillBackground.bottom
                         anchors.bottomMargin: -implicitSize
                         anchors.right: root.isRight ? parent.right : undefined
                         anchors.left: root.isRight ? undefined : parent.left
                     }
 
-                    Rectangle {
-                        id: pillBackground
-                        anchors.fill: parent
-                        implicitWidth: ringColumn.implicitWidth + 28
-                        implicitHeight: ringColumn.implicitHeight + 36
+                    ColumnLayout {
+                        id: ringColumn
+                        anchors.centerIn: parent
+                        spacing: 20
 
-                        color: Appearance.colors.colLayer0
-                        border.width: 1
-                        border.color: Qt.alpha(Appearance.colors.colOnLayer0, 0.08)
+                        Repeater {
+                            model: AiUsage.enabledProviders
 
-                        topLeftRadius: root.isRight ? 26 : 0
-                        bottomLeftRadius: root.isRight ? 26 : 0
-                        topRightRadius: root.isRight ? 0 : 26
-                        bottomRightRadius: root.isRight ? 0 : 26
+                            delegate: MouseArea {
+                                id: ringSlot
+                                required property string modelData
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.preferredWidth: ring.implicitWidth
+                                Layout.preferredHeight: ring.implicitHeight
+                                implicitWidth: ring.implicitWidth
+                                implicitHeight: ring.implicitHeight
+                                width: implicitWidth
+                                height: implicitHeight
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
 
-                        ColumnLayout {
-                            id: ringColumn
-                            anchors.centerIn: parent
-                            spacing: 20
+                                onClicked: {
+                                    AiUsage.refreshProvider(ringSlot.modelData);
+                                }
 
-                            Repeater {
-                                model: AiUsage.enabledProviders
+                                AiUsageRing {
+                                    id: ring
+                                    anchors.centerIn: parent
+                                    providerId: ringSlot.modelData
+                                    ringSize: 48
+                                    lineWidth: 4
+                                    showPercentLabel: true
+                                    vertical: true
+                                    isHovered: ringSlot.containsMouse
+                                }
 
-                                delegate: MouseArea {
-                                    id: ringSlot
-                                    required property string modelData
-                                    Layout.alignment: Qt.AlignHCenter
-                                    hoverEnabled: true
-                                    implicitWidth: ring.implicitWidth
-                                    implicitHeight: ring.implicitHeight
-
-                                    AiUsageRing {
-                                        id: ring
-                                        providerId: ringSlot.modelData
-                                        ringSize: 48
-                                        lineWidth: 4
-                                        showPercentLabel: true
-                                        vertical: true
-                                        isHovered: ringSlot.containsMouse
-                                    }
-
-                                    AiUsagePopup {
-                                        providerId: ringSlot.modelData
-                                        hoverTarget: ringSlot
-                                        edgeOverride: root.isRight ? "right" : "left"
-                                        thicknessOverride: pillBackground.implicitWidth + 14
-                                    }
+                                AiUsagePopup {
+                                    providerId: ringSlot.modelData
+                                    hoverTarget: ringSlot
+                                    edgeOverride: root.isRight ? "right" : "left"
+                                    thicknessOverride: pillBackground.implicitWidth + 14
                                 }
                             }
                         }

@@ -3,6 +3,7 @@ import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.bar
 import qs.services
 import QtQuick
 import QtQuick.Controls
@@ -2179,6 +2180,155 @@ Scope {
                                 }
 
                                 Item { Layout.fillWidth: true }
+
+                                // AI Usage in Start Menu Footer
+                                RowLayout {
+                                    visible: (Config.options?.dock?.startMenuShowAiUsage ?? true) && (Config.options?.ai?.usage?.enable ?? true) && AiUsage.enabledProviders.length > 0
+                                    spacing: 12
+                                    Layout.rightMargin: 8
+
+                                    Repeater {
+                                        model: AiUsage.enabledProviders
+                                        delegate: MouseArea {
+                                            id: startMenuAiSlot
+                                            required property string modelData
+                                            implicitWidth: aiRing.implicitWidth
+                                            implicitHeight: 32
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            onClicked: {
+                                                AiUsage.refreshProvider(startMenuAiSlot.modelData);
+                                            }
+
+                                            AiUsageRing {
+                                                id: aiRing
+                                                anchors.centerIn: parent
+                                                providerId: startMenuAiSlot.modelData
+                                                ringSize: 24
+                                                lineWidth: 2
+                                                vertical: false
+                                                showPercentLabel: true
+                                                isHovered: startMenuAiSlot.containsMouse
+                                            }
+
+                                            PopupWindow {
+                                                id: startMenuAiPopup
+                                                anchor {
+                                                    item: startMenuAiSlot
+                                                    edges: Edges.Top
+                                                    gravity: Edges.Top
+                                                }
+                                                visible: startMenuAiSlot.containsMouse
+                                                color: "transparent"
+                                                implicitWidth: aiCard.implicitWidth + Appearance.sizes.elevationMargin * 2
+                                                implicitHeight: aiCard.implicitHeight + Appearance.sizes.elevationMargin * 2 + 8
+
+                                                StyledRectangularShadow {
+                                                    target: aiCard
+                                                    visible: startMenuAiPopup.visible
+                                                }
+
+                                                Rectangle {
+                                                    id: aiCard
+                                                    anchors.centerIn: parent
+                                                    implicitWidth: 260
+                                                    implicitHeight: cardContent.implicitHeight + 24
+                                                    radius: Appearance.rounding.normal
+                                                    color: Appearance.colors.colLayer1
+                                                    border.width: 1
+                                                    border.color: Appearance.colors.colLayer0Border
+
+                                                    ColumnLayout {
+                                                        id: cardContent
+                                                        anchors {
+                                                            top: parent.top
+                                                            left: parent.left
+                                                            right: parent.right
+                                                            margins: 12
+                                                        }
+                                                        spacing: 10
+
+                                                        readonly property var meta: AiUsage.metaFor(startMenuAiSlot.modelData)
+                                                        readonly property var usage: AiUsage.dataFor(startMenuAiSlot.modelData)
+
+                                                        RowLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 8
+                                                            CustomIcon {
+                                                                source: cardContent.meta.icon + ".svg"
+                                                                colorize: true
+                                                                color: Appearance.colors.colOnLayer1
+                                                                width: 18
+                                                                height: 18
+                                                            }
+                                                            StyledText {
+                                                                text: Translation.tr("%1 Usage").arg(cardContent.meta.name)
+                                                                font.pixelSize: Appearance.font.pixelSize.normal
+                                                                font.weight: Font.DemiBold
+                                                                color: Appearance.colors.colOnLayer1
+                                                            }
+                                                            Item { Layout.fillWidth: true }
+                                                            StyledText {
+                                                                visible: cardContent.usage.loading
+                                                                text: Translation.tr("Updating…")
+                                                                font.pixelSize: 11
+                                                                color: Appearance.colors.colSubtext
+                                                            }
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            visible: cardContent.usage.ok && cardContent.usage.limits.length > 0
+                                                            spacing: 8
+
+                                                            Repeater {
+                                                                model: cardContent.usage.ok ? cardContent.usage.limits : []
+                                                                delegate: ColumnLayout {
+                                                                    id: limitItem
+                                                                    required property var modelData
+                                                                    Layout.fillWidth: true
+                                                                    spacing: 3
+
+                                                                    RowLayout {
+                                                                        Layout.fillWidth: true
+                                                                        StyledText {
+                                                                            text: limitItem.modelData.label
+                                                                            font.pixelSize: 12
+                                                                            font.weight: Font.Medium
+                                                                            color: Appearance.colors.colOnLayer1
+                                                                        }
+                                                                        Item { Layout.fillWidth: true }
+                                                                        StyledText {
+                                                                            text: Math.round(limitItem.modelData.percent) + "%"
+                                                                            font.pixelSize: 12
+                                                                            font.weight: Font.DemiBold
+                                                                            color: AiUsage.severityColor(limitItem.modelData.percent)
+                                                                        }
+                                                                    }
+
+                                                                    Rectangle {
+                                                                        Layout.fillWidth: true
+                                                                        implicitHeight: 5
+                                                                        radius: 2.5
+                                                                        color: Qt.alpha(Appearance.colors.colOnLayer1, 0.15)
+
+                                                                        Rectangle {
+                                                                            width: parent.width * Math.min(1, Math.max(0, limitItem.modelData.percent / 100))
+                                                                            height: parent.height
+                                                                            radius: 2.5
+                                                                            color: AiUsage.severityColor(limitItem.modelData.percent)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
                                 // Quick Folder Shortcuts (Home, Downloads, Documents, Pictures, Terminal, Settings)
                                 RowLayout {

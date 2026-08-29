@@ -543,6 +543,7 @@ Singleton {
                 property bool showPinButton: true
                 property bool showAppsButton: true
                 property bool showMedia: true
+                property bool showAiUsage: true
                 property bool showRecorder: false
                 property bool monochromeIcons: true
                 property real height: 60
@@ -564,6 +565,7 @@ Singleton {
                 property bool startMenuShowRecentFiles: true
                 property bool startMenuEnableCalculator: true
                 property bool startMenuShowQuickFolders: true
+                property bool startMenuShowAiUsage: true
                 property bool startMenuAcrylicBackground: false
                 property bool startMenuShowSystemResources: true
             }

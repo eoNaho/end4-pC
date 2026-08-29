@@ -25,11 +25,11 @@ Item {
     readonly property bool available: usage.ok === true
     readonly property color ringColor: root.available ? AiUsage.severityColor(root.percent) : Appearance.colors.colOutline
 
-    implicitWidth: mainLayout.implicitWidth
-    implicitHeight: mainLayout.implicitHeight
+    implicitWidth: contentLayout.implicitWidth
+    implicitHeight: contentLayout.implicitHeight
 
     GridLayout {
-        id: mainLayout
+        id: contentLayout
         anchors.centerIn: parent
         columns: root.vertical ? 1 : 2
         rowSpacing: 4
@@ -39,6 +39,8 @@ Item {
         Item {
             id: ringContainer
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+            Layout.preferredWidth: root.ringSize
+            Layout.preferredHeight: root.ringSize
             width: root.ringSize
             height: root.ringSize
             scale: root.isHovered ? 1.08 : 1.0

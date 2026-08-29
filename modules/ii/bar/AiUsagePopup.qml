@@ -22,6 +22,7 @@ StyledPopup {
             delegate: ColumnLayout {
                 id: card
                 required property string modelData
+                required property int index
                 readonly property var meta: AiUsage.metaFor(modelData)
                 readonly property var usage: AiUsage.dataFor(modelData)
 
