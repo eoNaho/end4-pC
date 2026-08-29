@@ -1106,6 +1106,21 @@
     "Terminal": "Terminal",
     "Feels like": "Sensação",
     "Humidity": "Umidade",
-    "Weather": "Clima",
-    "Page %1 of %2": "Página %1 de %2"
+    "Page %1 of %2": "Página %1 de %2",
+    "Encoder / Hardware Acceleration": "Encoder / Aceleração por Hardware",
+    "Video encoding backend and hardware acceleration": "Backend de codificação de vídeo e aceleração por hardware",
+    "NVIDIA GPU detected — NVENC hardware encoding recommended": "GPU NVIDIA detectada — Codificação NVENC recomendada",
+    "Auto (GPU / NVENC)": "Automático (GPU / NVENC)",
+    "NVIDIA NVENC (Hardware)": "NVIDIA NVENC (Hardware)",
+    "VA-API (AMD / Intel)": "VA-API (AMD / Intel)",
+    "CPU (libx264 Software)": "CPU (libx264 Software)",
+    "Lossless": "Sem Perdas (Lossless)",
+    "Pause Recording": "Pausar Gravação",
+    "Stop Recording": "Parar Gravação",
+    "Record Fullscreen": "Gravar Tela Cheia",
+    "Screen recording is in progress": "Gravação de tela em andamento",
+    "Caps Lock": "Caps Lock",
+    "Num Lock": "Num Lock",
+    "ON": "Ativado",
+    "OFF": "Desativado"
 }

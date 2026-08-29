@@ -29,6 +29,14 @@ Scope {
             id: "gamma",
             sourceUrl: "indicators/GammaIndicator.qml"
         },
+        {
+            id: "capslock",
+            sourceUrl: "indicators/CapsLockIndicator.qml"
+        },
+        {
+            id: "numlock",
+            sourceUrl: "indicators/NumLockIndicator.qml"
+        },
     ]
 
     function triggerOsd() {
@@ -44,6 +52,20 @@ Scope {
         onTriggered: {
             GlobalStates.osdVolumeOpen = false;
             root.protectionMessage = "";
+        }
+    }
+
+    Connections {
+        target: Keylock
+        function onCapsLockChanged() {
+            root.protectionMessage = "";
+            root.currentIndicator = "capslock";
+            root.triggerOsd();
+        }
+        function onNumLockChanged() {
+            root.protectionMessage = "";
+            root.currentIndicator = "numlock";
+            root.triggerOsd();
         }
     }
 
