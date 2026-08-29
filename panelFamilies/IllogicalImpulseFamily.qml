@@ -55,7 +55,7 @@ Scope {
     PanelLoader { component: Settings {} }
     PanelLoader { component: DesktopMenu {} }
     PanelLoader { component: DropShelfPanel {} }
-    PanelLoader { component: NiriBackdrop {} }
+    PanelLoader { extraCondition: WM.compositor === "niri"; component: NiriBackdrop {} }
     PanelLoader { component: ScreenFrame {} }
-    PanelLoader { component: Win11StartMenu {} }
+    PanelLoader { extraCondition: Config.options.dock.enable || GlobalStates.startMenuOpen; component: Win11StartMenu {} }
 }

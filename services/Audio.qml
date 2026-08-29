@@ -117,25 +117,11 @@ Singleton {
     }
 
     function playSystemSound(soundName) {
+        if (!soundName) return;
         const ogaPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.oga`;
         const oggPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.ogg`;
 
-        // Try playing .oga first
-        let command = [
-            "ffplay",
-            "-nodisp",
-            "-autoexit",
-            ogaPath
-        ];
-        Quickshell.execDetached(command);
-
-        // Also try playing .ogg (ffplay will just fail silently if file doesn't exist)
-        command = [
-            "ffplay",
-            "-nodisp",
-            "-autoexit",
-            oggPath
-        ];
-        Quickshell.execDetached(command);
+        const cmd = `f=""; [ -f "${ogaPath}" ] && f="${ogaPath}" || { [ -f "${oggPath}" ] && f="${oggPath}"; }; [ -n "$f" ] && { pw-play "$f" 2>/dev/null || paplay "$f" 2>/dev/null || canberra-gtk-play -f "$f" 2>/dev/null || ffplay -nodisp -autoexit "$f" 2>/dev/null; }`;
+        Quickshell.execDetached(["sh", "-c", cmd]);
     }
 }

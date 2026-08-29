@@ -204,8 +204,8 @@ Singleton {
                 enabled: Config.options.light.antiFlashbang.enable && Appearance.m3colors.darkmode
                 target: Hyprland
                 function onRawEvent(event) {
-                    if (["activewindowv2", "windowtitlev2"].includes(event.name)) {
-                        screenshotTimer.interval = root.contentSwitchDelay;
+                    if (["activewindowv2"].includes(event.name)) {
+                        screenshotTimer.interval = Math.max(100, root.contentSwitchDelay);
                         screenshotTimer.restart();
                     } else if (["workspacev2"].includes(event.name)) {
                         screenshotTimer.interval = root.workspaceAnimationDelay;
@@ -216,10 +216,12 @@ Singleton {
 
             Timer {
                 id: screenshotTimer
-                interval: 700 // This is what I have for a Hyprland ws anim
+                interval: 700
+                repeat: false
                 onTriggered: {
-                    screenshotProc.running = false;
-                    screenshotProc.running = true;
+                    if (!screenshotProc.running) {
+                        screenshotProc.running = true;
+                    }
                 }
             }
 
@@ -228,15 +230,17 @@ Singleton {
                 command: ["bash", "-c",
                     `mkdir -p '${StringUtils.shellSingleQuoteEscape(root.screenshotDir)}'`
                     + ` && grim -o '${StringUtils.shellSingleQuoteEscape(screenScope.screenName)}' -`
-                    + ` | magick png:- -colorspace Gray -format "%[fx:mean*100]" info:`
+                    + ` | magick png:- -resize 100x100 -colorspace Gray -format "%[fx:mean*100]" info:`
                 ]
                 stdout: StdioCollector {
                     id: lightnessCollector
                     onStreamFinished: {
-                        Quickshell.execDetached(["rm", screenScope.screenshotPath]); // Cleanup
-                        const lightness = lightnessCollector.text
-                        const newMultiplier = root.brightnessMultiplierForLightness(parseFloat(lightness))
-                        Brightness.getMonitorForScreen(screenScope.modelData).setBrightnessMultiplier(newMultiplier)
+                        const lightness = lightnessCollector.text;
+                        const val = parseFloat(lightness);
+                        if (!isNaN(val)) {
+                            const newMultiplier = root.brightnessMultiplierForLightness(val);
+                            Brightness.getMonitorForScreen(screenScope.modelData)?.setBrightnessMultiplier(newMultiplier);
+                        }
                     }
                 }
             }

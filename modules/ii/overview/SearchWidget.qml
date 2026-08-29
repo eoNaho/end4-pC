@@ -127,16 +127,6 @@ Item { // Wrapper
             }
             spacing: 0
 
-            // clip: true
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: searchWidgetContent.width
-                    height: searchWidgetContent.width
-                    radius: searchWidgetContent.radius
-                }
-            }
-
             SearchBar {
                 id: searchBar
                 property real verticalPadding: 4

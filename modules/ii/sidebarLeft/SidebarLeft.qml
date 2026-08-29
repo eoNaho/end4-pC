@@ -59,24 +59,32 @@ Scope { // Scope
         else root.pin = !root.pin;
     }
 
+    function ensureSidebarContent() {
+        if (!root.sidebarContent && sidebarLoader.item?.contentParent) {
+            root.sidebarContent = contentComponent.createObject(sidebarLoader.item.contentParent, {
+                "scopeRoot": root,
+            });
+        }
+    }
+
     Component.onCompleted: {
-        root.sidebarContent = contentComponent.createObject(sidebarLoader.item.contentParent, {
-            "scopeRoot": root,
-        });
+        if (GlobalStates.sidebarLeftOpen) {
+            root.ensureSidebarContent();
+        }
     }
 
     onDetachChanged: {
         if (root.detach) {
             GlobalFocusGrab.removeDismissable(sidebarLoader.item) // Remove sidebar from the focus grab system
-            sidebarContent.parent = null; // Detach content from sidebar
+            if (sidebarContent) sidebarContent.parent = null; // Detach content from sidebar
             sidebarLoader.active = false; // Unload sidebar
             detachedSidebarLoader.active = true; // Load detached window
-            sidebarContent.parent = detachedSidebarLoader.item.contentParent;
+            if (sidebarContent) sidebarContent.parent = detachedSidebarLoader.item.contentParent;
         } else {
-            sidebarContent.parent = null; // Detach content from window
+            if (sidebarContent) sidebarContent.parent = null; // Detach content from window
             detachedSidebarLoader.active = false; // Unload detached window
             sidebarLoader.active = true; // Load sidebar
-            sidebarContent.parent = sidebarLoader.item.contentParent;
+            if (sidebarContent) sidebarContent.parent = sidebarLoader.item.contentParent;
         }
     }
 
@@ -92,12 +100,16 @@ Scope { // Scope
             property bool reallyVisible: false
             visible: reallyVisible
 
-            Component.onCompleted: reallyVisible = GlobalStates.sidebarLeftOpen
+            Component.onCompleted: {
+                reallyVisible = GlobalStates.sidebarLeftOpen;
+                if (reallyVisible) root.ensureSidebarContent();
+            }
 
             Connections {
                 target: GlobalStates
                 function onSidebarLeftOpenChanged() {
                     if (GlobalStates.sidebarLeftOpen) {
+                        root.ensureSidebarContent();
                         closeAnimTimer.stop();
                         panelWindow.reallyVisible = true;
                     } else if (panelWindow.animatedEntrance) {

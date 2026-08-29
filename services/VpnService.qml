@@ -50,14 +50,19 @@ Singleton {
         id: actionProc
     }
 
+    Connections {
+        target: Network
+        function onNetworkNameChanged() { if (!checkProc.running) checkProc.running = true; }
+        function onWifiStatusChanged() { if (!checkProc.running) checkProc.running = true; }
+    }
+
     Timer {
-        interval: 2500
+        interval: 10000
         running: true
         repeat: true
         triggeredOnStart: true
         onTriggered: {
-            checkProc.running = false;
-            checkProc.running = true;
+            if (!checkProc.running) checkProc.running = true;
         }
     }
 

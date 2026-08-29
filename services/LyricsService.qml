@@ -119,27 +119,29 @@ Singleton {
         }
     }
 
+    function syncNow() {
+        if (root.status !== "ok" || root.lyricsLines.length === 0) return;
+        const pos = root.shiftedPos()
+        let idx = -1
+        for (let i = 0; i < root.lyricsLines.length; i++) {
+            if (root.lyricsLines[i].time <= pos) idx = i
+            else break
+        }
+        if (idx !== root.activeIndex) {
+            root.activeIndex = idx
+            root.slots = root.buildSlots(idx)
+        }
+        root.updateActiveWords()
+    }
+
     Timer {
         id: syncTimer
         // 50ms so the word sweep tracks the audio smoothly even for fast
-        // real word timings; at 200ms a newly active word jumps straight to
-        // a large progress and the glow looks choppy.
+        // real word timings; only runs when actively playing.
         interval: 50
         repeat: true
-        running: root.status === "ok" && root.lyricsLines.length > 0
-        onTriggered: {
-            const pos = root.shiftedPos()
-            let idx = -1
-            for (let i = 0; i < root.lyricsLines.length; i++) {
-                if (root.lyricsLines[i].time <= pos) idx = i
-                else break
-            }
-            if (idx !== root.activeIndex) {
-                root.activeIndex = idx
-                root.slots = root.buildSlots(idx)
-            }
-            root.updateActiveWords()
-        }
+        running: root.status === "ok" && root.lyricsLines.length > 0 && (root.activePlayer?.isPlaying ?? false)
+        onTriggered: root.syncNow()
     }
 
     Process {
@@ -239,6 +241,8 @@ Singleton {
         target: root.activePlayer
         function onTrackTitleChanged() { root.restartLyrics() }
         function onTrackArtistChanged() { root.restartLyrics() }
+        function onPlaybackStateChanged() { root.syncNow() }
+        function onPositionChanged() { if (!syncTimer.running) root.syncNow() }
     }
 
     Component.onCompleted: root.restartLyrics()

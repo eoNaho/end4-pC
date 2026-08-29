@@ -64,17 +64,7 @@ Item { // Window
     property real bottomLeftRadius
     property real bottomRightRadius
 
-    layer.enabled: true
-    layer.effect: OpacityMask {
-        maskSource: Rectangle {
-            width: root.width
-            height: root.height
-            topLeftRadius: root.topLeftRadius
-            topRightRadius: root.topRightRadius
-            bottomRightRadius: root.bottomRightRadius
-            bottomLeftRadius: root.bottomLeftRadius
-        }
-    }
+    layer.enabled: false
 
     Behavior on x {
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
@@ -93,7 +83,7 @@ Item { // Window
         id: windowPreview
         anchors.fill: parent
         captureSource: GlobalStates.overviewOpen ? root.toplevel : null
-        live: true
+        live: false
 
         // Color overlay for interactions
         Rectangle {

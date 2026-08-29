@@ -18,13 +18,21 @@ Singleton {
     property real scoreThreshold: 0.2
     property list<string> entries: []
 
-    readonly property var preparedEntries: entries.map(a => ({
-        name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
-        entry: a
-    }))
+    property var _cachedPreparedEntries: null
+    onEntriesChanged: _cachedPreparedEntries = null
+
+    function getPreparedEntries() {
+        if (!_cachedPreparedEntries) {
+            _cachedPreparedEntries = entries.slice(0, 500).map(a => ({
+                name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
+                entry: a
+            }));
+        }
+        return _cachedPreparedEntries;
+    }
 
     function fuzzyQuery(search: string): var {
-        if (search.trim() === "") {
+        if (!search || search.trim() === "") {
             return entries;
         }
         if (root.sloppySearch) {
@@ -36,7 +44,8 @@ Singleton {
             return results.map(item => item.entry)
         }
 
-        return Fuzzy.go(search, preparedEntries, {
+        const prepped = root.getPreparedEntries();
+        return Fuzzy.go(search, prepped, {
             all: true,
             key: "name"
         }).map(r => {

@@ -84,16 +84,6 @@ Singleton {
         }
     }
 
-    Timer {
-        interval: Config?.options.resources.updateInterval ?? 3000
-        running: true
-        repeat: true
-        onTriggered: {
-            if (!tempProc.running) tempProc.running = true
-            if (!diskProc.running) diskProc.running = true
-        }
-    }
-
     function kbToGbString(kb) {
         return (kb / (1024 * 1024)).toFixed(1) + " GB"
     }
@@ -120,6 +110,8 @@ Singleton {
         updateCpuUsageHistory()
         updateDiskUsageHistory()
     }
+
+    property int _pollCount: 0
 
     Timer {
         interval: Config.options?.resources?.updateInterval ?? 3000
@@ -151,6 +143,15 @@ Singleton {
             }
 
             root.updateHistories()
+
+            if (!tempProc.running) tempProc.running = true
+
+            // Poll disk less frequently (every ~30s) to avoid unnecessary df subprocess forks
+            _pollCount++
+            if (_pollCount >= 10 || diskTotal <= 1) {
+                _pollCount = 0
+                if (!diskProc.running) diskProc.running = true
+            }
         }
     }
 

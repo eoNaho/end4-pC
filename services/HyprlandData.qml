@@ -49,43 +49,87 @@ Singleton {
 
     function updateWindowList() {
         if (WM.compositor !== "hyprland") return;
-        if (!getClients.running) getClients.running = true;
+        debounceClientsTimer.restart();
     }
 
     function updateLayers() {
         if (WM.compositor !== "hyprland") return;
-        if (!getLayers.running) getLayers.running = true;
+        debounceLayersTimer.restart();
     }
 
     function updateMonitors() {
         if (WM.compositor !== "hyprland") return;
-        if (!getMonitors.running) getMonitors.running = true;
+        debounceMonitorsTimer.restart();
     }
 
     function updateWorkspaces() {
+        if (WM.compositor !== "hyprland") return;
+        debounceWorkspacesTimer.restart();
+    }
+
+    function updateAll() {
+        if (WM.compositor !== "hyprland") return;
+        debounceClientsTimer.restart();
+        debounceWorkspacesTimer.restart();
+        debounceMonitorsTimer.restart();
+    }
+
+    function executeClients() {
+        if (WM.compositor !== "hyprland") return;
+        if (!getClients.running) getClients.running = true;
+        if (!getActiveWorkspace.running) getActiveWorkspace.running = true;
+    }
+
+    function executeWorkspaces() {
         if (WM.compositor !== "hyprland") return;
         if (!getWorkspaces.running) getWorkspaces.running = true;
         if (!getActiveWorkspace.running) getActiveWorkspace.running = true;
     }
 
-    function updateAll() {
+    function executeMonitors() {
         if (WM.compositor !== "hyprland") return;
-        debounceTimer.restart();
+        if (!getMonitors.running) getMonitors.running = true;
+    }
+
+    function executeLayers() {
+        if (WM.compositor !== "hyprland") return;
+        if (!getLayers.running) getLayers.running = true;
     }
 
     function executeAll() {
         if (WM.compositor !== "hyprland") return;
-        updateWindowList();
-        updateMonitors();
-        updateLayers();
-        updateWorkspaces();
+        executeClients();
+        executeWorkspaces();
+        executeMonitors();
+        executeLayers();
     }
 
     Timer {
-        id: debounceTimer
-        interval: 50
+        id: debounceClientsTimer
+        interval: 120
         repeat: false
-        onTriggered: root.executeAll()
+        onTriggered: root.executeClients()
+    }
+
+    Timer {
+        id: debounceWorkspacesTimer
+        interval: 100
+        repeat: false
+        onTriggered: root.executeWorkspaces()
+    }
+
+    Timer {
+        id: debounceMonitorsTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.executeMonitors()
+    }
+
+    Timer {
+        id: debounceLayersTimer
+        interval: 300
+        repeat: false
+        onTriggered: root.executeLayers()
     }
 
     function biggestWindowForWorkspace(workspaceId) {
@@ -106,8 +150,20 @@ Singleton {
         enabled: WM.compositor === "hyprland"
 
         function onRawEvent(event) {
-            if (["openlayer", "closelayer", "screencast"].includes(event.name)) return;
-            root.updateAll()
+            const name = event.name;
+            if (!name || ["screencast", "windowtitle", "windowtitlev2", "submap", "bell", "urgent"].includes(name)) return;
+
+            if (["workspace", "workspacev2", "createworkspace", "createworkspacev2", "destroyworkspace", "destroyworkspacev2", "focusedmon", "focusedmonv2"].includes(name)) {
+                debounceWorkspacesTimer.restart();
+            } else if (["openwindow", "closewindow", "movewindow", "movewindowv2", "activewindow", "activewindowv2", "fullscreen", "changefloatingmode", "pin"].includes(name)) {
+                debounceClientsTimer.restart();
+            } else if (["monitoradded", "monitoraddedv2", "monitorremoved"].includes(name)) {
+                debounceMonitorsTimer.restart();
+            } else if (["openlayer", "closelayer"].includes(name)) {
+                debounceLayersTimer.restart();
+            } else {
+                root.updateAll();
+            }
         }
     }
 

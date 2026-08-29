@@ -79,13 +79,14 @@ Scope {
 
     Process {
         id: cavaProc
-        running: (GlobalStates.mediaControlsOpen ||
+        running: MprisController.isPlaying && (
+            GlobalStates.mediaControlsOpen ||
             GlobalStates.sidebarRightOpen || 
-            Config.options.bar.layouts.leftLayout.includes("visualizer") ||
-            Config.options.bar.layouts.middleLayout.includes("visualizer") ||
-            Config.options.bar.layouts.rightLayout.includes("visualizer") ||
-            Config.options.background.widgets.visualizer.enable)
-            && MprisController.activePlayer !== null
+            (Config.options?.bar?.layouts?.leftLayout?.includes("visualizer") ?? false) ||
+            (Config.options?.bar?.layouts?.middleLayout?.includes("visualizer") ?? false) ||
+            (Config.options?.bar?.layouts?.rightLayout?.includes("visualizer") ?? false) ||
+            (Config.options?.background?.widgets?.visualizer?.enable ?? false)
+        )
         onRunningChanged: {
             if (!cavaProc.running) {
                 GlobalStates.visualizerPoints = [];
@@ -94,6 +95,10 @@ Scope {
         command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
+                if (!MprisController.isPlaying) {
+                    GlobalStates.visualizerPoints = [];
+                    return;
+                }
                 let points = data.split(";").map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 GlobalStates.visualizerPoints = points;
             }

@@ -40,7 +40,7 @@ Rectangle {
     rotation: pullRotation + continuousRotation + leapRotation
 
     RotationAnimation on continuousRotation {
-        running: root.loading
+        running: root.loading && root.visible && root.opacity > 0
         duration: 12000
         easing.type: Easing.Linear
         loops: Animation.Infinite
@@ -49,7 +49,7 @@ Rectangle {
     }
     Timer {
         interval: 800
-        running: root.loading
+        running: root.loading && root.visible && root.opacity > 0
         repeat: true
         onTriggered: leapAnimation.start()
     }

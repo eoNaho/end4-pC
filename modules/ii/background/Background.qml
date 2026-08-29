@@ -345,7 +345,7 @@ Variants {
                 cache: true
                 smooth: true
                 asynchronous: true
-                layer.enabled: true
+                layer.enabled: bgRoot.transitionProgress < 1.0
                 visible: false
             }
 
@@ -361,7 +361,7 @@ Variants {
                 cache: true
                 smooth: true
                 asynchronous: true
-                layer.enabled: true
+                layer.enabled: (bgRoot.transitionProgress < 1.0) || blurLoader.active
                 visible: !blurLoader.active && !bgRoot.centeredWallpaperEnabled && !bgRoot.videoRevealed
                     && (bgRoot.wallpaperAnimation === "" || bgRoot.transitionProgress >= 1.0)
                 Behavior on x {
@@ -378,9 +378,18 @@ Variants {
                 }
                 onStatusChanged: {
                     if (status === Image.Ready) {
-                        bgRoot.updateZoomScale()
+                        if (wallpaper.implicitWidth > 0 && wallpaper.implicitHeight > 0) {
+                            const width = wallpaper.implicitWidth;
+                            const height = wallpaper.implicitHeight;
+                            bgRoot.wallpaperWidth = width;
+                            bgRoot.wallpaperHeight = height;
+                            const minSuitableScale = Math.max(bgRoot.screen.width / width, bgRoot.screen.height / height);
+                            bgRoot.effectiveWallpaperScale = minSuitableScale * bgRoot.additionalScaleFactor * bgRoot.parallaxRation;
+                        } else {
+                            bgRoot.updateZoomScale();
+                        }
                         if (bgRoot.transitionProgress === 0.0) {
-                            transitionAnim.restart()
+                            transitionAnim.restart();
                         }
                     }
                 }
