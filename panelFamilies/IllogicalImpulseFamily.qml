@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 
 import qs.modules.common
+import qs.modules.ii.aiUsage
 import qs.modules.ii.background
 import qs.modules.ii.bar
 import qs.modules.ii.dock
@@ -30,6 +31,7 @@ import qs.modules.ii.screenshotResult
 
 Scope {
     PanelLoader { extraCondition: !Config.options.bar.vertical; component: Bar {} }
+    PanelLoader { extraCondition: Config.options.ai.usage.dock.enable; component: AiUsageDock {} }
     PanelLoader { component: Background {} }
     PanelLoader { extraCondition: Config.options.dock.enable; component: Dock {} }
     PanelLoader { component: DotsSwitcher {} }

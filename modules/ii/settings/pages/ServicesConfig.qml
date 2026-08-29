@@ -520,6 +520,122 @@ ContentPage {
             }
         }
 
+        ContentSection {
+            icon: "monitoring"
+            shape: MaterialShape.Shape.Ghostish
+            title: Translation.tr("AI Usage")
+
+            GroupedList {
+                ConfigSwitch {
+                    buttonIcon: "monitoring"
+                    text: Translation.tr("Show AI usage (Claude, Codex, ...)")
+                    checked: Config.options.ai.usage.enable
+                    onCheckedChanged: {
+                        Config.options.ai.usage.enable = checked;
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Providers")
+                    visible: Config.options.ai.usage.enable
+
+                    Repeater {
+                        model: Object.keys(AiUsage.providerMeta)
+                        delegate: ConfigSwitch {
+                            required property string modelData
+                            buttonIcon: "smart_toy"
+                            text: AiUsage.providerMeta[modelData].name
+                            checked: Config.options.ai.usage.providers.includes(modelData)
+                            onCheckedChanged: {
+                                let list = Array.from(Config.options.ai.usage.providers);
+                                const has = list.includes(modelData);
+                                if (checked && !has) list.push(modelData);
+                                else if (!checked && has) list = list.filter(p => p !== modelData);
+                                Config.options.ai.usage.providers = list;
+                            }
+                        }
+                    }
+                }
+
+                ConfigSpinBox {
+                    visible: Config.options.ai.usage.enable
+                    icon: "av_timer"
+                    text: Translation.tr("Refresh interval (mins)")
+                    value: Config.options.ai.usage.fetchInterval
+                    from: 1
+                    to: 60
+                    stepSize: 1
+                    onValueChanged: {
+                        Config.options.ai.usage.fetchInterval = value;
+                    }
+                }
+
+                ConfigSwitch {
+                    visible: Config.options.ai.usage.enable
+                    buttonIcon: "percent"
+                    text: Translation.tr("Show percentage label")
+                    checked: Config.options.ai.usage.showPercentLabel
+                    onCheckedChanged: {
+                        Config.options.ai.usage.showPercentLabel = checked;
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Edge Tab (Dock)")
+                    visible: Config.options.ai.usage.enable
+
+                    ConfigSwitch {
+                        buttonIcon: "dock_to_right"
+                        text: Translation.tr("Show as an auto-hiding tab on the screen edge")
+                        checked: Config.options.ai.usage.dock.enable
+                        onCheckedChanged: {
+                            Config.options.ai.usage.dock.enable = checked;
+                        }
+                    }
+
+                    ConfigSelectionArray {
+                        visible: Config.options.ai.usage.dock.enable
+                        text: Translation.tr("Edge")
+                        icon: "align_horizontal_right"
+                        currentValue: Config.options.ai.usage.dock.edge
+                        onSelected: newValue => {
+                            Config.options.ai.usage.dock.edge = newValue;
+                        }
+                        options: [
+                            { displayName: Translation.tr("Right"), value: "right" },
+                            { displayName: Translation.tr("Left"), value: "left" }
+                        ]
+                    }
+
+                    ConfigSpinBox {
+                        visible: Config.options.ai.usage.dock.enable
+                        icon: "swap_vert"
+                        text: Translation.tr("Vertical position (%)")
+                        value: Math.round((Config.options.ai.usage.dock.position ?? 0.5) * 100)
+                        from: 0
+                        to: 100
+                        stepSize: 5
+                        onValueChanged: {
+                            Config.options.ai.usage.dock.position = value / 100;
+                        }
+                    }
+
+                    ConfigSpinBox {
+                        visible: Config.options.ai.usage.dock.enable
+                        icon: "swipe_right"
+                        text: Translation.tr("Hover reveal width (px)")
+                        value: Config.options.ai.usage.dock.hoverRegionWidth
+                        from: 1
+                        to: 20
+                        stepSize: 1
+                        onValueChanged: {
+                            Config.options.ai.usage.dock.hoverRegionWidth = value;
+                        }
+                    }
+                }
+            }
+        }
+
         WorldMap {
             Layout.fillWidth: true
             Layout.preferredHeight: 300

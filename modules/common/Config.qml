@@ -102,6 +102,19 @@ Singleton {
                         "requires_key": true
                     }
                 ]
+                property JsonObject usage: JsonObject {
+                    property bool enable: true
+                    property int fetchInterval: 5 // minutes
+                    property list<string> providers: ["claude"] // ids of enabled providers, in display order
+                    property bool showPercentLabel: true
+                    property JsonObject dock: JsonObject {
+                        property bool enable: true
+                        property string edge: "right" // "right" or "left"
+                        property int hoverRegionWidth: 3
+                        property real position: 0.14 // 0..1, vertical position along the edge
+                        property list<string> screenList: [] // empty = all monitors
+                    }
+                }
             }
 
             property JsonObject appearance: JsonObject {

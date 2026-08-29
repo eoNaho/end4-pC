@@ -13,12 +13,19 @@ LazyLoader {
     property real popupBackgroundMargin: 0
     active: Boolean(hoverTarget && hoverTarget.containsMouse)
 
+    // Allows a standalone (non-bar) panel, e.g. AiUsageDock, to anchor this
+    // popup to its own edge/thickness instead of the main bar's. Leave at
+    // defaults ("" / -1) to keep the original bar-relative behavior.
+    property string edgeOverride: ""
+    property real thicknessOverride: -1
+
     readonly property bool barVertical: Config.options.bar.vertical
-    readonly property string barEdge: {
-        if (!barVertical) return Config.options.bar.bottom ? "bottom" : "top"
-        return Config.options.bar.bottom ? "right" : "left"
-    }
-    readonly property real barThickness: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+    readonly property string barEdge: root.edgeOverride !== "" ? root.edgeOverride : (
+        !barVertical ? (Config.options.bar.bottom ? "bottom" : "top")
+                     : (Config.options.bar.bottom ? "right" : "left")
+    )
+    readonly property real barThickness: root.thicknessOverride >= 0 ? root.thicknessOverride
+        : (barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight)
 
     component: PanelWindow {
         id: popupWindow
