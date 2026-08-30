@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.modules.common
 import QtQuick
 import Quickshell
@@ -40,31 +41,46 @@ Singleton {
     property list<real> diskUsageHistory: []
     property string maxAvailableDiskString: kbToGbString(diskTotal)
 
+    property string detectedTempPath: ""
     Process {
         id: tempProc
-        // Read CPU temperature directly from sysfs hwmon (no grep/awk overhead).
-        // Looks for hwmon entries named "Tctl", "Tdie" or "Package id 0" (AMD/Intel).
-        // Falls back to `sensors` if nothing is found in hwmon.
+        // Reads CPU temperature from cached sysfs hwmon path directly.
+        // If not cached yet, discovers the path once and caches it.
         command: ["bash", "-c", `
+            if [ -n "${root.detectedTempPath}" ] && [ -f "${root.detectedTempPath}" ]; then
+                awk '{printf "%.1f", $1/1000}' "${root.detectedTempPath}" 2>/dev/null && exit 0
+            fi
             for f in /sys/class/hwmon/hwmon*/; do
-                name=$(cat "$f/name" 2>/dev/null)
                 for temp_label in "$f"temp*_label; do
                     [ -f "$temp_label" ] || continue
                     label=$(cat "$temp_label" 2>/dev/null)
                     case "$label" in
                         "Tctl"|"Tdie"|"Package id 0")
                             input="\${temp_label%_label}_input"
-                            [ -f "$input" ] && awk '{printf "%.1f", $1/1000}' "$input" && exit 0
+                            if [ -f "$input" ]; then
+                                val=$(awk '{printf "%.1f", $1/1000}' "$input" 2>/dev/null)
+                                echo "PATH:$input|$val"
+                                exit 0
+                            fi
                             ;;
                     esac
                 done
             done
-            sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Tdie' | grep -oP '\\+\\K[0-9.]+(?=°C)' | head -1
+            val=$(sensors 2>/dev/null | grep -E 'Package id 0|Tctl|Tdie' | grep -oP '\\+\\K[0-9.]+(?=°C)' | head -1)
+            [ -n "$val" ] && echo "$val"
         `]
         stdout: StdioCollector {
             onStreamFinished: {
-                const val = parseFloat(text.trim())
-                if (!isNaN(val)) root.cpuTemp = val
+                const trimmed = text.trim()
+                if (trimmed.startsWith("PATH:")) {
+                    const parts = trimmed.substring(5).split("|")
+                    root.detectedTempPath = parts[0]
+                    const val = parseFloat(parts[1])
+                    if (!isNaN(val)) root.cpuTemp = val
+                } else {
+                    const val = parseFloat(trimmed)
+                    if (!isNaN(val)) root.cpuTemp = val
+                }
             }
         }
     }
@@ -144,7 +160,9 @@ Singleton {
 
             root.updateHistories()
 
-            if (!tempProc.running) tempProc.running = true
+            if ((Config.options?.bar?.resources?.alwaysShowCpuTemp || GlobalStates.overlayOpen) && !tempProc.running) {
+                tempProc.running = true
+            }
 
             // Poll disk less frequently (every ~30s) to avoid unnecessary df subprocess forks
             _pollCount++

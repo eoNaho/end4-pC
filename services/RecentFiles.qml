@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.modules.common.functions
 import Quickshell
 import Quickshell.Io
 import QtQuick
@@ -13,7 +14,7 @@ import QtQuick
 Singleton {
     id: root
 
-    property string filePath: Directories.trimFileProtocol("file://" + Quickshell.env("HOME") + "/.local/share/recently-used.xbel")
+    property string filePath: FileUtils.trimFileProtocol("file://" + Quickshell.env("HOME") + "/.local/share/recently-used.xbel")
     property var list: []
 
     function reload() {

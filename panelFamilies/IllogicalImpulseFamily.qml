@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 
+import qs.services
 import qs.modules.common
 import qs.modules.ii.aiUsage
 import qs.modules.ii.background

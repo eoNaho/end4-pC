@@ -3,11 +3,12 @@ import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
 BarWidgetSwitcherArea {
     id: root
     property bool alwaysShowAllResources: false
-    property var screen: root.QsWindow.window?.screen
+    property var screen: root.QsWindow?.window?.screen
     readonly property bool isCompact: (screen?.width ?? 1920) < 1500
     horizontalExtraPadding: isCompact ? 6 : 12
 

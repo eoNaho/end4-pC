@@ -3564,7 +3564,7 @@ Scope {
 
                             Rectangle {
                                 anchors.fill: parent
-                                radius: Appearance.rounding.medium
+                                radius: Appearance.rounding.normal
                                 color: Appearance.colors.colLayer1
                                 border.width: 1
                                 border.color: Appearance.colors.colLayer0Border

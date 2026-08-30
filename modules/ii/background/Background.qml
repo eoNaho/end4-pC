@@ -106,8 +106,8 @@ Variants {
         property string currentShader: "pixelate"
         property string wallpaperAnimation: Config.options.background.wallpaperAnimation ?? "random"
 
-        property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && monitor && workspace.monitor.name == monitor.name)
-        property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(workspace => ((workspace.toplevels.values.filter(window => window.wayland?.fullscreen)[0] != undefined) && workspace.active))[0]
+        property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace?.monitor && monitor && workspace.monitor.name == monitor.name)
+        property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(workspace => ((workspace?.toplevels?.values?.filter(window => window?.wayland?.fullscreen)[0] != undefined) && workspace.active))[0]
         visible: true
 
         property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
@@ -182,28 +182,57 @@ Variants {
             bgRoot.videoRevealed = false
             bgRoot.updateZoomScale()
             if (wallpaperSafetyTriggered) {
+                transitionAnim.stop()
                 previousWallpaper.source = ""
                 wallpaper.source = ""
                 bgRoot.transitionProgress = 1.0
                 return
             }
             if (bgRoot.wallpaperAnimation === "") {
+                transitionAnim.stop()
                 wallpaper.source = wallpaperPath
                 bgRoot.currentWallpaperSource = wallpaperPath
+                bgRoot.transitionProgress = 1.0
                 if (!bgRoot.wallpaperIsVideo) return
                 bgRoot.videoRevealed = true
                 return
             }
 
+            // If the wallpaper source didn't change and is already loaded, avoid re-triggering transition
+            if (bgRoot.currentWallpaperSource === wallpaperPath && wallpaper.status === Image.Ready) {
+                bgRoot.transitionProgress = 1.0
+                if (bgRoot.wallpaperIsVideo) bgRoot.videoRevealed = true
+                return
+            }
+
+            // If we don't have a valid previous wallpaper source, show directly without transition
+            if (!bgRoot.currentWallpaperSource || bgRoot.currentWallpaperSource.length === 0) {
+                transitionAnim.stop()
+                wallpaper.source = wallpaperPath
+                bgRoot.currentWallpaperSource = wallpaperPath
+                bgRoot.transitionProgress = 1.0
+                if (bgRoot.wallpaperIsVideo) bgRoot.videoRevealed = true
+                return
+            }
+
             previousWallpaper.source = bgRoot.currentWallpaperSource
-            wallpaper.source = wallpaperPath
-            bgRoot.currentWallpaperSource = wallpaperPath
             if (bgRoot.wallpaperAnimation === "random") {
                 bgRoot.currentShader = bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
             } else {
                 bgRoot.currentShader = bgRoot.wallpaperAnimation
             }
+
+            transitionAnim.stop()
             bgRoot.transitionProgress = 0.0
+            bgRoot.currentWallpaperSource = wallpaperPath
+            wallpaper.source = wallpaperPath
+
+            // If image is already ready (e.g. cached synchronously by Qt from first screen), start animation immediately
+            if (wallpaper.status === Image.Ready) {
+                transitionAnim.restart()
+            } else if (wallpaper.status === Image.Error) {
+                bgRoot.transitionProgress = 1.0
+            }
         }
 
         NumberAnimation {
@@ -261,7 +290,7 @@ Variants {
         property int workspaceChunkSize: Config?.options.bar.workspaces.shown ?? 10
         property int totalWorkspaces: Math.ceil(lastWorkspaceId / workspaceChunkSize) * workspaceChunkSize
 
-        property int workspaceIndex: (bgRoot.monitor.activeWorkspace?.id ?? 1) - 1
+        property int workspaceIndex: (bgRoot.monitor?.activeWorkspace?.id ?? 1) - 1
         property real middleFraction: 0.5
         property real fraction: {
             if (bgRoot.totalWorkspaces <= 1) return middleFraction;
@@ -378,19 +407,11 @@ Variants {
                 }
                 onStatusChanged: {
                     if (status === Image.Ready) {
-                        if (wallpaper.implicitWidth > 0 && wallpaper.implicitHeight > 0) {
-                            const width = wallpaper.implicitWidth;
-                            const height = wallpaper.implicitHeight;
-                            bgRoot.wallpaperWidth = width;
-                            bgRoot.wallpaperHeight = height;
-                            const minSuitableScale = Math.max(bgRoot.screen.width / width, bgRoot.screen.height / height);
-                            bgRoot.effectiveWallpaperScale = minSuitableScale * bgRoot.additionalScaleFactor * bgRoot.parallaxRation;
-                        } else {
-                            bgRoot.updateZoomScale();
-                        }
-                        if (bgRoot.transitionProgress === 0.0) {
+                        if (bgRoot.transitionProgress === 0.0 && !transitionAnim.running) {
                             transitionAnim.restart();
                         }
+                    } else if (status === Image.Error) {
+                        bgRoot.transitionProgress = 1.0;
                     }
                 }
             }
@@ -419,7 +440,7 @@ Variants {
                 Timer {
                     interval: 16
                     repeat: true
-                    running: transitionEffect.visible
+                    running: transitionEffect.visible && transitionAnim.running
                     onTriggered: transitionEffect.time += interval / 1000.0
                 }
                 onVisibleChanged: if (!visible) transitionEffect.time = 0.0

@@ -3,12 +3,13 @@ import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
 BarWidgetSwitcher {
     id: root
     property bool borderless: Config.options.bar.borderless
     property bool showDate: Config.options.time.showDate
-    property var screen: root.QsWindow.window?.screen
+    property var screen: root.QsWindow?.window?.screen
     readonly property bool isCompact: (screen?.width ?? 1920) < 1500
     readonly property string effectiveDate: isCompact ? DateTime.shortDate : DateTime.longDate
     property var today: new Date()
